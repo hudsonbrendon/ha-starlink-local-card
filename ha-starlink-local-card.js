@@ -6,13 +6,13 @@ const CAM = { az: 32, el: 22 };
 const RAD = Math.PI / 180;
 
 // --- camera / projection --------------------------------------------------
-function projection(width, height, pad = 30) {
+function projection(width, height, pad = 16) {
   const sinA = Math.sin(CAM.az * RAD), cosA = Math.cos(CAM.az * RAD);
   const sinE = Math.sin(CAM.el * RAD), cosE = Math.cos(CAM.el * RAD);
   const flat = ([x, y, z]) => [x * sinA - y * cosA, (x * cosA + y * sinA) * sinE - z * cosE];
   const pts = [];
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [-6, 150])
-    pts.push(flat([sx * 70, sy * 70, z]));
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [-4, 52])
+    pts.push(flat([sx * 80, sy * 74, z]));
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
   const lo = [Math.min(...xs), Math.min(...ys)], hi = [Math.max(...xs), Math.max(...ys)];
   const scale = Math.min((width - pad * 2) / (hi[0] - lo[0]), (height - pad * 2) / (hi[1] - lo[1]));
@@ -46,8 +46,8 @@ const smoothPath = (pts) => {
 // --- Starlink Mini geometry (faithful to the official render) --------------
 // A thin flat rounded-rectangle slab: bright white face, dark edge band, a
 // small flip-out kickstand. It reclines to the dish's azimuth/elevation.
-const SLAB = { a: 68, b: 54, r: 15, t: 5 };        // half-w, half-h, corner, thickness
-const CENTER = [0, 0, 34];                          // slab centre, low to the ground
+const SLAB = { a: 70, b: 56, r: 16, t: 4 };        // half-w, half-h, corner, thickness
+const CENTER = [0, 0, 30];                          // slab centre, low to the ground
 const add = (p, v, s = 1) => [p[0] + v[0] * s, p[1] + v[1] * s, p[2] + v[2] * s];
 
 function frame(azDeg, elDeg) {
@@ -223,16 +223,16 @@ class StarlinkLocalCard extends HTMLElement {
         <div id="badge" class="badge" hidden></div>
         <svg viewBox="0 0 620 420" preserveAspectRatio="xMidYMid meet" aria-label="Starlink dish">
           <defs>
-            <linearGradient id="slFace" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#ffffff"/><stop offset="0.55" stop-color="#eef1f6"/><stop offset="1" stop-color="#d4dae4"/>
+            <linearGradient id="slFace" x1="0.1" y1="0" x2="0.9" y2="1">
+              <stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#eef2f7"/><stop offset="1" stop-color="#d6dce6"/>
             </linearGradient>
-            <linearGradient id="slMast" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0" stop-color="#e9edf3"/><stop offset="1" stop-color="#c4ccd9"/>
-            </linearGradient>
-            <radialGradient id="slHub" cx="0.4" cy="0.35" r="0.7">
-              <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9d1dd"/>
+            <radialGradient id="slStage" cx="0.5" cy="0.46" r="0.6">
+              <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+              <stop offset="0.6" stop-color="#ffffff" stop-opacity="0.03"/>
+              <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
             </radialGradient>
           </defs>
+          <ellipse class="sl-spot" cx="300" cy="240" rx="300" ry="190"/>
           <g id="stand"></g><g id="ghost"></g><g id="mini"></g>
         </svg>
         <div class="readout">
@@ -259,14 +259,15 @@ ha-card{overflow:hidden}
 .badge{margin:8px 0 2px;padding:6px 10px;border-radius:8px;font-size:.82rem;font-weight:600;
   background:rgba(245,166,35,.16);color:#f0a500;border:1px solid rgba(245,166,35,.4)}
 svg{width:100%;height:auto;display:block}
-.sl-shadow{fill:rgba(10,14,22,.34);filter:blur(6px)}
-.sl-stand{fill:#e9edf2;stroke:#c3ccd8;stroke-width:1}
-.sl-stand-sh{fill:#cdd4de;opacity:.9}
-.sl-rim{fill:#2a2e36}
+.sl-spot{fill:url(#slStage)}
+.sl-shadow{fill:rgba(8,11,18,.38);filter:blur(9px)}
+.sl-stand{fill:#e4e9f0;stroke:#c3ccd8;stroke-width:1}
+.sl-stand-sh{fill:#c7cfdb;opacity:.9}
+.sl-rim{fill:#31353d}
 .sl-face{fill:url(#slFace)}
-.sl-edge{fill:none;stroke:#9aa6b6;stroke-width:1.2}
+.sl-edge{fill:none;stroke:#aab4c3;stroke-width:1}
 .sl-edge.warn{stroke:#f0a500;stroke-width:2}
-.sl-sheen{fill:#ffffff;opacity:.5}
+.sl-sheen{fill:#ffffff;opacity:.4;filter:blur(7px)}
 .sl-logo{fill:#aab2c0;font:700 6px/1 -apple-system,system-ui,sans-serif;letter-spacing:1.8px;text-anchor:middle;opacity:.55}
 .sl-ghost{fill:none;stroke:var(--primary-color,#8ab4ff);stroke-width:1.4;stroke-dasharray:5 5;opacity:.6}
 .readout{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px;margin-top:4px}
@@ -280,4 +281,4 @@ svg{width:100%;height:auto;display:block}
 customElements.define("starlink-local-card", StarlinkLocalCard);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: "starlink-local-card", name: "Starlink Local Card", description: "Antena Starlink que aponta pro az/el real da integração starlink_local.", preview: true });
-console.info("%c STARLINK-LOCAL-CARD %c v0.3.0 ", "background:#8ab4ff;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+console.info("%c STARLINK-LOCAL-CARD %c v0.4.0 ", "background:#8ab4ff;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
