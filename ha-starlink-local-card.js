@@ -131,6 +131,14 @@ const TOKENS = {
   uplink: (e) => /uplink_throughput$|_uplink$/.test(e),
   clients: (e) => /_clients$|wifi_clients/.test(e),
 };
+// map our config keys -> the integration's translation_key (language-agnostic)
+const TK = {
+  azimuth: "azimuth", elevation: "elevation",
+  desired_azimuth: "desired_azimuth", desired_elevation: "desired_elevation",
+  signal: "signal_quality", obstruction: "obstruction",
+  restricted: "bandwidth_restricted", dl_reason: "dl_restricted_reason",
+  pop_ping: "pop_ping", downlink: "downlink", uplink: "uplink", clients: "clients",
+};
 
 class StarlinkLocalCard extends HTMLElement {
   setConfig(config) {
@@ -152,8 +160,20 @@ class StarlinkLocalCard extends HTMLElement {
   _resolve() {
     const h = this._hass, cfg = this._config.entities || {}, found = {};
     for (const k of Object.keys(TOKENS)) if (cfg[k]) found[k] = cfg[k];
+    // language-agnostic: match by the integration's translation_key
+    const ents = h.entities || {};
+    const pref = (key, eid) => {
+      const want = key === "clients" ? "router" : "dish", cur = found[key];
+      return !cur || (eid.includes(want) && !cur.includes(want));
+    };
+    for (const eid of Object.keys(ents)) {
+      const e = ents[eid];
+      if (!e || e.platform !== "starlink_local") continue;
+      for (const k of Object.keys(TK)) if (!cfg[k] && TK[k] === e.translation_key && pref(k, eid)) found[k] = eid;
+    }
+    // fallback: match by entity_id substring (English installs)
     for (const eid of Object.keys(h.states || {})) {
-      const belongs = (h.entities && h.entities[eid] && h.entities[eid].platform === "starlink_local") || /starlink/.test(eid);
+      const belongs = (ents[eid] && ents[eid].platform === "starlink_local") || /starlink/.test(eid);
       if (!belongs) continue;
       for (const k of Object.keys(TOKENS)) if (!found[k] && TOKENS[k](eid)) found[k] = eid;
     }
@@ -281,4 +301,4 @@ svg{width:100%;height:auto;display:block}
 customElements.define("starlink-local-card", StarlinkLocalCard);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: "starlink-local-card", name: "Starlink Local Card", description: "Antena Starlink que aponta pro az/el real da integração starlink_local.", preview: true });
-console.info("%c STARLINK-LOCAL-CARD %c v0.4.0 ", "background:#8ab4ff;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+console.info("%c STARLINK-LOCAL-CARD %c v0.5.0 ", "background:#8ab4ff;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
