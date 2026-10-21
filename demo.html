@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Starlink Local Card — demo</title>
+<style>
+  body{margin:0;background:#0f1116;font-family:-apple-system,system-ui,sans-serif;color:#e8ebf0;
+       display:flex;gap:24px;flex-wrap:wrap;justify-content:center;padding:28px}
+  ha-card{display:block;width:420px;background:#171a21;border:1px solid #242a35;border-radius:14px;
+          color:#e8ebf0;--secondary-text-color:#9aa4b5;--primary-color:#8ab4ff;--card-background-color:#14161c}
+  h3{width:100%;text-align:center;font-weight:500;color:#9aa4b5}
+</style></head>
+<body>
+<h3>Starlink Local Card — demo com dados mockados</h3>
+<starlink-local-card id="a"></starlink-local-card>
+<starlink-local-card id="b"></starlink-local-card>
+<script type="module">
+import "./ha-starlink-local-card.js";
+const mk = (over) => ({
+  entities: {},
+  states: {
+    "sensor.starlink_dish_antenna_azimuth": { state: "127" },
+    "sensor.starlink_dish_antenna_elevation": { state: "69" },
+    "sensor.starlink_dish_desired_azimuth": { state: "180" },
+    "sensor.starlink_dish_desired_elevation": { state: "76" },
+    "sensor.starlink_dish_signal_quality": { state: "100" },
+    "sensor.starlink_dish_fraction_obstructed": { state: "0.3" },
+    "binary_sensor.starlink_dish_bandwidth_restricted": { state: "off" },
+    "sensor.starlink_dish_downlink_restriction_reason": { state: "NONE" },
+    "sensor.starlink_dish_pop_ping_latency": { state: "27" },
+    "sensor.starlink_dish_downlink_throughput": { state: "62000000" },
+    "sensor.starlink_dish_uplink_throughput": { state: "37000000" },
+    "sensor.starlink_router_wifi_clients": { state: "4" },
+    ...over,
+  },
+});
+document.getElementById("a").setConfig({ title: "Starlink Mini" });
+document.getElementById("a").hass = mk();
+document.getElementById("b").setConfig({ title: "Mini (banda restrita)" });
+document.getElementById("b").hass = mk({
+  "sensor.starlink_dish_antenna_azimuth": { state: "126" },
+  "sensor.starlink_dish_antenna_elevation": { state: "68" },
+  "sensor.starlink_dish_signal_quality": { state: "42" },
+  "binary_sensor.starlink_dish_bandwidth_restricted": { state: "on" },
+  "sensor.starlink_dish_downlink_restriction_reason": { state: "LOW_SPEED_POLICY_LIMIT" },
+  "sensor.starlink_dish_downlink_throughput": { state: "560000" },
+});
+</script>
+</body></html>
