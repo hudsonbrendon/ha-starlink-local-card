@@ -27,6 +27,8 @@ function iso([x, y, z], P) {
           P.oy + ((x * P.cosA + y * P.sinA) * P.sinE - z * P.cosE) * P.scale];
 }
 const depth = ([x, y, z], P) => -((x * P.cosA + y * P.sinA) * P.cosE + z * P.sinE);
+const pathOf = (pts, close = false) =>
+  pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join("") + (close ? "Z" : "");
 const smoothPath = (pts) => {
   // Catmull-Rom through projected points -> cubic Bézier, closed
   if (pts.length < 3) return "";
@@ -41,106 +43,75 @@ const smoothPath = (pts) => {
   return d.join("") + "Z";
 };
 
-// --- dish geometry --------------------------------------------------------
-const DISH = { a: 60, b: 40, r: 30, t: 9 };      // half-w, half-h, corner, thickness
-const CENTER = [0, 0, 104];                        // dish centre on the mast
-const BASE = [2, 24, 0];                           // foot on the ground
+// --- Starlink Mini geometry (faithful to the official render) --------------
+// A thin flat rounded-rectangle slab: bright white face, dark edge band, a
+// small flip-out kickstand. It reclines to the dish's azimuth/elevation.
+const SLAB = { a: 68, b: 54, r: 15, t: 5 };        // half-w, half-h, corner, thickness
+const CENTER = [0, 0, 34];                          // slab centre, low to the ground
 const add = (p, v, s = 1) => [p[0] + v[0] * s, p[1] + v[1] * s, p[2] + v[2] * s];
 
 function frame(azDeg, elDeg) {
   const az = azDeg * RAD, el = elDeg * RAD, c = Math.cos, s = Math.sin;
   return {
-    N: [c(el) * c(az), c(el) * s(az), s(el)],
-    V: [-s(el) * c(az), -s(el) * s(az), c(el)],
-    U: [-s(az), c(az), 0],
+    N: [c(el) * c(az), c(el) * s(az), s(el)],      // face normal (where it points)
+    V: [-s(el) * c(az), -s(el) * s(az), c(el)],    // panel "up" (toward high edge)
+    U: [-s(az), c(az), 0],                          // panel "right"
   };
 }
-// rounded-rectangle outline in the panel plane, returns world points at nOff
-function outline(F, nOff, steps = 72) {
-  const { a, b, r } = DISH;
-  const pts = [];
-  // superellipse-ish rounded rect via corner arcs
+// rounded-rectangle outline in the panel plane -> world points at nOff
+function outline(F, nOff, steps = 80) {
+  const { a, b, r } = SLAB, pts = [];
   const corners = [[a - r, b - r, 0], [-(a - r), b - r, Math.PI / 2], [-(a - r), -(b - r), Math.PI], [a - r, -(b - r), -Math.PI / 2]];
-  const per = Math.max(4, Math.floor(steps / 4));
+  const per = Math.max(5, Math.floor(steps / 4));
   for (const [cx, cy, a0] of corners)
     for (let i = 0; i <= per; i++) {
       const ang = a0 + (i / per) * (Math.PI / 2);
-      const u = cx + Math.cos(ang) * r, v = cy + Math.sin(ang) * r;
       let p = [...CENTER];
-      p = add(p, F.U, u); p = add(p, F.V, v); p = add(p, F.N, nOff);
+      p = add(p, F.U, cx + Math.cos(ang) * r);
+      p = add(p, F.V, cy + Math.sin(ang) * r);
+      p = add(p, F.N, nOff);
       pts.push(p);
     }
   return pts;
 }
 
-function dishSvg(P, azDeg, elDeg, { signal = 1, restricted = false, ghost = false } = {}) {
+function miniSvg(P, azDeg, elDeg, { signal = 1, restricted = false, ghost = false } = {}) {
   const F = frame(azDeg, elDeg);
   const at = (p) => iso(p, P);
-  if (ghost) {
-    const front = outline(F, DISH.t).map(at);
-    return `<path class="sl-ghost" d="${smoothPath(front)}"/>`;
-  }
+  const top = outline(F, SLAB.t).map(at);
+  if (ghost) return `<path class="sl-ghost" d="${smoothPath(top)}"/>`;
+  const bottom = outline(F, 0).map(at);
   const out = [];
-  const back = outline(F, 0).map(at);
-  const front = outline(F, DISH.t).map(at);
-  // thickness: rim fill = union silhouette (draw back, then front on top)
-  out.push(`<path class="sl-rim" d="${smoothPath(back)}"/>`);
-  // the dish face
-  out.push(`<path class="sl-face" d="${smoothPath(front)}"/>`);
-  // soft sheen: a highlight blob near the upper edge of the face
-  const hi = add(add([...CENTER], F.V, DISH.b * 0.42), F.N, DISH.t + 0.2);
-  const hl = add(add([...CENTER], F.U, -DISH.a * 0.3), F.N, DISH.t + 0.2);
-  const hc = at(add(hi, F.U, -DISH.a * 0.2));
-  out.push(`<ellipse class="sl-sheen" cx="${hc[0].toFixed(1)}" cy="${hc[1].toFixed(1)}" rx="${(DISH.a * 0.5 * P.scale).toFixed(1)}" ry="${(DISH.b * 0.26 * P.scale).toFixed(1)}" transform="rotate(${(-CAM.az).toFixed(1)} ${hc[0].toFixed(1)} ${hc[1].toFixed(1)})"/>`);
-  // centre hub + faint logo
-  const hub = at(add([...CENTER], F.N, DISH.t + 0.3));
-  out.push(`<circle class="sl-hub" cx="${hub[0].toFixed(1)}" cy="${hub[1].toFixed(1)}" r="${(3.2 * P.scale).toFixed(1)}"/>`);
-  const logoP = at(add(add([...CENTER], F.V, -DISH.b * 0.5), F.N, DISH.t + 0.3));
-  out.push(`<text class="sl-logo" x="${logoP[0].toFixed(1)}" y="${logoP[1].toFixed(1)}">STARLINK</text>`);
-  // face outline
-  out.push(`<path class="sl-edge" d="${smoothPath(front)}"/>`);
+  // dark edge band = bottom silhouette peeking under the white top
+  out.push(`<path class="sl-rim" d="${smoothPath(bottom)}"/>`);
+  // bright white array face
+  out.push(`<path class="sl-face" d="${smoothPath(top)}"/>`);
+  // soft sheen across the upper third of the face
+  const hc = at(add(add([...CENTER], F.V, SLAB.b * 0.34), F.N, SLAB.t + 0.2));
+  out.push(`<ellipse class="sl-sheen" cx="${hc[0].toFixed(1)}" cy="${hc[1].toFixed(1)}" rx="${(SLAB.a * 0.62 * P.scale).toFixed(1)}" ry="${(SLAB.b * 0.22 * P.scale).toFixed(1)}" transform="rotate(${(-CAM.az).toFixed(1)} ${hc[0].toFixed(1)} ${hc[1].toFixed(1)})"/>`);
+  // faint Starlink wordmark toward the lower edge
+  const lp = at(add(add([...CENTER], F.V, -SLAB.b * 0.6), F.N, SLAB.t + 0.3));
+  out.push(`<text class="sl-logo" x="${lp[0].toFixed(1)}" y="${lp[1].toFixed(1)}">STARLINK</text>`);
+  // face outline + restriction tint
+  out.push(`<path class="sl-edge${restricted ? " warn" : ""}" d="${smoothPath(top)}"/>`);
   return out.join("");
 }
 
-function mastSvg(P, azDeg, elDeg) {
+function standSvg(P, azDeg, elDeg) {
   const F = frame(azDeg, elDeg);
   const at = (p) => iso(p, P);
   const out = [];
-  // ground shadow
+  // ground shadow under the slab
+  const c0 = add([...CENTER], F.N, 0);
   const sh = [];
-  for (let i = 0; i < 28; i++) { const t = (i / 28) * Math.PI * 2; sh.push(at([BASE[0] + Math.cos(t) * 42, BASE[1] + Math.sin(t) * 20, 0])); }
+  for (let i = 0; i < 28; i++) { const t = (i / 28) * Math.PI * 2; sh.push(at([c0[0] + Math.cos(t) * SLAB.a * 0.95, c0[1] + 8 + Math.sin(t) * SLAB.b * 0.5, 0])); }
   out.push(`<path class="sl-shadow" d="${smoothPath(sh)}"/>`);
-  // base foot (flat oval)
-  const foot = [];
-  for (let i = 0; i < 28; i++) { const t = (i / 28) * Math.PI * 2; foot.push(at([BASE[0] + Math.cos(t) * 20, BASE[1] + Math.sin(t) * 11, 1.5])); }
-  out.push(`<path class="sl-base" d="${smoothPath(foot)}"/>`);
-  // mast: tapered neck from base up to the back of the dish
-  const top = add([...CENTER], F.N, -2);          // just behind the dish
-  const topS = at(top), baseS = at([BASE[0], BASE[1], 3]);
-  const dx = baseS[0] - topS[0], dy = baseS[1] - topS[1], len = Math.hypot(dx, dy) || 1;
-  const nx = -dy / len, ny = dx / len;
-  const wt = 4.2 * P.scale, wb = 6.2 * P.scale;
-  out.push(`<path class="sl-mast" d="${
-    `M${(topS[0]+nx*wt).toFixed(1)} ${(topS[1]+ny*wt).toFixed(1)}` +
-    `L${(topS[0]-nx*wt).toFixed(1)} ${(topS[1]-ny*wt).toFixed(1)}` +
-    `L${(baseS[0]-nx*wb).toFixed(1)} ${(baseS[1]-ny*wb).toFixed(1)}` +
-    `L${(baseS[0]+nx*wb).toFixed(1)} ${(baseS[1]+ny*wb).toFixed(1)}Z`}"/>`);
-  out.push(`<path class="sl-mast-hi" d="${`M${(topS[0]+nx*wt).toFixed(1)} ${(topS[1]+ny*wt).toFixed(1)}L${(baseS[0]+nx*wb).toFixed(1)} ${(baseS[1]+ny*wb).toFixed(1)}`}"/>`);
-  return out.join("");
-}
-
-function beamSvg(P, azDeg, elDeg, { signal = 1, restricted = false }) {
-  if (signal <= 0.02) return "";
-  const F = frame(azDeg, elDeg);
-  const at = (p) => iso(p, P);
-  const out = [];
-  const cls = restricted ? "sl-beam warn" : "sl-beam";
-  for (const off of [-0.5, 0, 0.5]) {
-    const a = add(add([...CENTER], F.U, off * DISH.a * 0.7), F.N, DISH.t);
-    const b = add(a, F.N, 120);
-    const pa = at(a), pb = at(b);
-    out.push(`<line class="${cls}" x1="${pa[0].toFixed(1)}" y1="${pa[1].toFixed(1)}" x2="${pb[0].toFixed(1)}" y2="${pb[1].toFixed(1)}" style="opacity:${(0.5 * signal).toFixed(2)}"/>`);
-  }
+  // small flip-out kickstand: a slim triangular leg from the underside to ground
+  const apex1 = add(add([...CENTER], F.U, 10), F.V, SLAB.b * 0.25);
+  const apex2 = add(add([...CENTER], F.U, -10), F.V, SLAB.b * 0.25);
+  const footW = [c0[0], c0[1] + 16, 0];
+  out.push(`<path class="sl-stand" d="${pathOf([at(apex1), at(apex2), at(footW)], true)}"/>`);
+  out.push(`<path class="sl-stand-sh" d="${pathOf([at(apex2), at(footW), at(add(footW, F.U, -3))], true)}"/>`);
   return out.join("");
 }
 
@@ -170,10 +141,9 @@ class StarlinkLocalCard extends HTMLElement {
     this.shadowRoot.innerHTML = this._shell();
     this._P = projection(620, 420);
     this._g = {
-      mast: this.shadowRoot.querySelector("#mast"),
-      beam: this.shadowRoot.querySelector("#beam"),
+      stand: this.shadowRoot.querySelector("#stand"),
       ghost: this.shadowRoot.querySelector("#ghost"),
-      dish: this.shadowRoot.querySelector("#dish"),
+      mini: this.shadowRoot.querySelector("#mini"),
     };
   }
   getCardSize() { return 6; }
@@ -220,10 +190,9 @@ class StarlinkLocalCard extends HTMLElement {
 
   _draw() {
     const t = this._target, P = this._P, az = this._cur.az, el = this._cur.el;
-    this._g.mast.innerHTML = mastSvg(P, az, el);
-    this._g.beam.innerHTML = beamSvg(P, az, el, { signal: this._cur.sig, restricted: t.restricted });
-    this._g.ghost.innerHTML = (t.daz != null && t.del != null && (Math.abs(t.daz - t.az) > 1.5 || Math.abs(t.del - t.el) > 1.5)) ? dishSvg(P, t.daz, t.del, { ghost: true }) : "";
-    this._g.dish.innerHTML = dishSvg(P, az, el, { signal: this._cur.sig, restricted: t.restricted });
+    this._g.stand.innerHTML = standSvg(P, az, el);
+    this._g.ghost.innerHTML = (t.daz != null && t.del != null && (Math.abs(t.daz - t.az) > 1.5 || Math.abs(t.del - t.el) > 1.5)) ? miniSvg(P, t.daz, t.del, { ghost: true }) : "";
+    this._g.mini.innerHTML = miniSvg(P, az, el, { signal: this._cur.sig, restricted: t.restricted });
     this._paint(t);
   }
 
@@ -264,7 +233,7 @@ class StarlinkLocalCard extends HTMLElement {
               <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9d1dd"/>
             </radialGradient>
           </defs>
-          <g id="mast"></g><g id="beam"></g><g id="ghost"></g><g id="dish"></g>
+          <g id="stand"></g><g id="ghost"></g><g id="mini"></g>
         </svg>
         <div class="readout">
           <div><label>Azimute</label><b id="r-az">—</b></div>
@@ -290,29 +259,25 @@ ha-card{overflow:hidden}
 .badge{margin:8px 0 2px;padding:6px 10px;border-radius:8px;font-size:.82rem;font-weight:600;
   background:rgba(245,166,35,.16);color:#f0a500;border:1px solid rgba(245,166,35,.4)}
 svg{width:100%;height:auto;display:block}
-.sl-shadow{fill:rgba(15,22,38,.22);filter:blur(5px)}
-.sl-base{fill:#c9d1dd;stroke:#aab4c4;stroke-width:1}
-.sl-mast{fill:url(#slMast);stroke:#b2bbca;stroke-width:1}
-.sl-mast-hi{fill:none;stroke:#ffffff;stroke-width:1.1;opacity:.5}
-.sl-rim{fill:#b9c2d1}
-.sl-face{fill:url(#slFace);stroke:none}
-.sl-edge{fill:none;stroke:#aeb8c8;stroke-width:1.3}
-.sl-sheen{fill:#ffffff;opacity:.45}
-.sl-hub{fill:url(#slHub);stroke:#bcc5d3;stroke-width:.8}
-.sl-logo{fill:#9aa4b5;font:600 7px/1 -apple-system,system-ui,sans-serif;letter-spacing:1.5px;text-anchor:middle;opacity:.8}
-.sl-ghost{fill:none;stroke:var(--primary-color,#8ab4ff);stroke-width:1.4;stroke-dasharray:5 5;opacity:.55}
-.sl-beam{stroke:#8ab4ff;stroke-width:2;stroke-linecap:round}
-.sl-beam.warn{stroke:#f0a500}
+.sl-shadow{fill:rgba(10,14,22,.34);filter:blur(6px)}
+.sl-stand{fill:#e9edf2;stroke:#c3ccd8;stroke-width:1}
+.sl-stand-sh{fill:#cdd4de;opacity:.9}
+.sl-rim{fill:#2a2e36}
+.sl-face{fill:url(#slFace)}
+.sl-edge{fill:none;stroke:#9aa6b6;stroke-width:1.2}
+.sl-edge.warn{stroke:#f0a500;stroke-width:2}
+.sl-sheen{fill:#ffffff;opacity:.5}
+.sl-logo{fill:#aab2c0;font:700 6px/1 -apple-system,system-ui,sans-serif;letter-spacing:1.8px;text-anchor:middle;opacity:.55}
+.sl-ghost{fill:none;stroke:var(--primary-color,#8ab4ff);stroke-width:1.4;stroke-dasharray:5 5;opacity:.6}
 .readout{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px;margin-top:4px}
 .readout div{display:flex;flex-direction:column}
 .readout label{font-size:.68rem;color:var(--secondary-text-color);text-transform:uppercase;letter-spacing:.04em}
 .readout b{font-size:.98rem;font-variant-numeric:tabular-nums}
 @media (prefers-color-scheme:dark){
-  .sl-shadow{fill:rgba(0,0,0,.4)}
-  .sl-base{fill:#aeb7c6;stroke:#8c97a9}
+  .sl-shadow{fill:rgba(0,0,0,.5)}
 }`;
 
 customElements.define("starlink-local-card", StarlinkLocalCard);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: "starlink-local-card", name: "Starlink Local Card", description: "Antena Starlink que aponta pro az/el real da integração starlink_local.", preview: true });
-console.info("%c STARLINK-LOCAL-CARD %c v0.2.0 ", "background:#8ab4ff;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+console.info("%c STARLINK-LOCAL-CARD %c v0.3.0 ", "background:#8ab4ff;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
