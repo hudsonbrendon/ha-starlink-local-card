@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>Starlink Local Card — demo</title>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Starlink Local Card</title>
 <style>
   body{margin:0;background:#0f1116;font-family:-apple-system,system-ui,sans-serif;color:#e8ebf0;
        display:flex;gap:24px;flex-wrap:wrap;justify-content:center;padding:28px}
@@ -8,7 +8,7 @@
   h3{width:100%;text-align:center;font-weight:500;color:#9aa4b5}
 </style></head>
 <body>
-<h3>Starlink Local Card — demo com dados mockados</h3>
+<h3>Starlink Local Card</h3>
 <starlink-local-card id="a"></starlink-local-card>
 <starlink-local-card id="b"></starlink-local-card>
 <script type="module">
@@ -31,9 +31,9 @@ const mk = (over) => ({
     ...over,
   },
 });
-document.getElementById("a").setConfig({ title: "Starlink Mini" });
+document.getElementById("a").setConfig({ title: "Starlink" });
 document.getElementById("a").hass = mk();
-document.getElementById("b").setConfig({ title: "Mini (banda restrita)" });
+document.getElementById("b").setConfig({ title: "Starlink (banda restrita)" });
 document.getElementById("b").hass = mk({
   "sensor.starlink_dish_antenna_azimuth": { state: "126" },
   "sensor.starlink_dish_antenna_elevation": { state: "68" },

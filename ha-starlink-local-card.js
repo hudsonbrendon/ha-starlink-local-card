@@ -1,135 +1,150 @@
-/*! Starlink Local Card — an isometric Starlink Mini for Home Assistant,
- *  driven by the starlink_local integration. MIT © Hudson Brendon.
- *  Art method inspired by the "anatomy" isometric kit; the renderer here is a
- *  self-contained subset (no runtime dependency). */
+/*! Starlink Local Card — the iconic Starlink dish for Home Assistant, driven by
+ *  the starlink_local integration. Clean, white, brand-style illustration whose
+ *  dish tilts to the real azimuth/elevation. MIT © Hudson Brendon. */
 
-const AZIMUTH = 46, ELEVATION = 30, UNIT = Math.sqrt(1.6);
+const CAM = { az: 32, el: 22 };
 const RAD = Math.PI / 180;
 
-// --- isometric projection (same math as the anatomy kit) ------------------
-function makeProjection(width, height, pad = 26) {
-  const cam = { sinA: Math.sin(AZIMUTH * RAD), cosA: Math.cos(AZIMUTH * RAD),
-                sinE: Math.sin(ELEVATION * RAD), cosE: Math.cos(ELEVATION * RAD) };
-  const flat = ([x, y, z]) => [(x * cam.sinA - y * cam.cosA),
-                               ((x * cam.cosA + y * cam.sinA) * cam.sinE - z * cam.cosE)];
-  // fit a generous bounding cube so the panel never clips as it tilts
-  const R = 92, pts = [];
-  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-0.4, 1.3])
-    pts.push(flat([sx * R, sy * R, sz * R + 70]));
+// --- camera / projection --------------------------------------------------
+function projection(width, height, pad = 30) {
+  const sinA = Math.sin(CAM.az * RAD), cosA = Math.cos(CAM.az * RAD);
+  const sinE = Math.sin(CAM.el * RAD), cosE = Math.cos(CAM.el * RAD);
+  const flat = ([x, y, z]) => [x * sinA - y * cosA, (x * cosA + y * sinA) * sinE - z * cosE];
+  const pts = [];
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const z of [-6, 150])
+    pts.push(flat([sx * 70, sy * 70, z]));
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const left = Math.min(...xs), right = Math.max(...xs);
-  const up = Math.min(...ys), down = Math.max(...ys);
-  const scale = Math.min((width - pad * 2) / (right - left), (height - pad * 2) / (down - up));
-  const k = scale * UNIT;
-  const origin = [width / 2 - ((left + right) / 2) * scale,
-                  height / 2 - ((up + down) / 2) * scale];
-  return { cam, k, origin };
+  const lo = [Math.min(...xs), Math.min(...ys)], hi = [Math.max(...xs), Math.max(...ys)];
+  const scale = Math.min((width - pad * 2) / (hi[0] - lo[0]), (height - pad * 2) / (hi[1] - lo[1]));
+  return {
+    sinA, cosA, sinE, cosE, scale,
+    ox: width / 2 - ((lo[0] + hi[0]) / 2) * scale,
+    oy: height / 2 - ((lo[1] + hi[1]) / 2) * scale,
+  };
 }
 function iso([x, y, z], P) {
-  const { cam, k, origin } = P;
-  return [origin[0] + (x * cam.sinA - y * cam.cosA) * k,
-          origin[1] + ((x * cam.cosA + y * cam.sinA) * cam.sinE - z * cam.cosE) * k];
+  return [P.ox + (x * P.sinA - y * P.cosA) * P.scale,
+          P.oy + ((x * P.cosA + y * P.sinA) * P.sinE - z * P.cosE) * P.scale];
 }
-const pathOf = (pts, close = true) =>
-  pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)} ${y.toFixed(1)}`).join("") + (close ? "Z" : "");
-const depthOf = ([x, y, z], P) => {
-  const { cam } = P; // larger = further back
-  return -((x * cam.cosA + y * cam.sinA) * cam.cosE + z * cam.sinE);
+const depth = ([x, y, z], P) => -((x * P.cosA + y * P.sinA) * P.cosE + z * P.sinE);
+const smoothPath = (pts) => {
+  // Catmull-Rom through projected points -> cubic Bézier, closed
+  if (pts.length < 3) return "";
+  const n = pts.length, d = [];
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    if (i === 0) d.push(`M${p1[0].toFixed(1)} ${p1[1].toFixed(1)}`);
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d.push(`C${c1[0].toFixed(1)} ${c1[1].toFixed(1)} ${c2[0].toFixed(1)} ${c2[1].toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`);
+  }
+  return d.join("") + "Z";
 };
 
-// --- Starlink Mini geometry ----------------------------------------------
-const PW = 119, PH = 104, PT = 14;           // panel width, height, thickness
-const CENTER = [6, 0, 118];                   // panel centre (world; z up)
-const add = (a, b, s = 1) => [a[0] + b[0] * s, a[1] + b[1] * s, a[2] + b[2] * s];
+// --- dish geometry --------------------------------------------------------
+const DISH = { a: 60, b: 40, r: 30, t: 9 };      // half-w, half-h, corner, thickness
+const CENTER = [0, 0, 104];                        // dish centre on the mast
+const BASE = [2, 24, 0];                           // foot on the ground
+const add = (p, v, s = 1) => [p[0] + v[0] * s, p[1] + v[1] * s, p[2] + v[2] * s];
 
 function frame(azDeg, elDeg) {
-  const az = azDeg * RAD, el = elDeg * RAD;
-  const c = Math.cos, s = Math.sin;
-  const N = [c(el) * c(az), c(el) * s(az), s(el)];
-  const V = [-s(el) * c(az), -s(el) * s(az), c(el)];
-  const U = [-s(az), c(az), 0];
-  const pp = (u, v, nOff = 0) => {
-    let p = [...CENTER];
-    p = add(p, U, (u * PW) / 2); p = add(p, V, (v * PH) / 2); p = add(p, N, nOff);
-    return p;
+  const az = azDeg * RAD, el = elDeg * RAD, c = Math.cos, s = Math.sin;
+  return {
+    N: [c(el) * c(az), c(el) * s(az), s(el)],
+    V: [-s(el) * c(az), -s(el) * s(az), c(el)],
+    U: [-s(az), c(az), 0],
   };
-  return { N, V, U, pp };
 }
-const shadeOf = (nrm) => {
-  const L = [-0.4, -0.5, 0.76];
-  const b = Math.max(0, nrm[0] * L[0] + nrm[1] * L[1] + nrm[2] * L[2]);
-  return b > 0.72 ? 0 : b > 0.48 ? 1 : b > 0.24 ? 2 : 3;
-};
-const cross = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-const norm = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+// rounded-rectangle outline in the panel plane, returns world points at nOff
+function outline(F, nOff, steps = 72) {
+  const { a, b, r } = DISH;
+  const pts = [];
+  // superellipse-ish rounded rect via corner arcs
+  const corners = [[a - r, b - r, 0], [-(a - r), b - r, Math.PI / 2], [-(a - r), -(b - r), Math.PI], [a - r, -(b - r), -Math.PI / 2]];
+  const per = Math.max(4, Math.floor(steps / 4));
+  for (const [cx, cy, a0] of corners)
+    for (let i = 0; i <= per; i++) {
+      const ang = a0 + (i / per) * (Math.PI / 2);
+      const u = cx + Math.cos(ang) * r, v = cy + Math.sin(ang) * r;
+      let p = [...CENTER];
+      p = add(p, F.U, u); p = add(p, F.V, v); p = add(p, F.N, nOff);
+      pts.push(p);
+    }
+  return pts;
+}
 
-function panelSvg(P, azDeg, elDeg, { signal = 1, ghost = false } = {}) {
+function dishSvg(P, azDeg, elDeg, { signal = 1, restricted = false, ghost = false } = {}) {
   const F = frame(azDeg, elDeg);
   const at = (p) => iso(p, P);
-  const out = [];
   if (ghost) {
-    const f = [F.pp(-1, 1, PT), F.pp(1, 1, PT), F.pp(1, -1, PT), F.pp(-1, -1, PT)];
-    out.push(`<path class="sl-ghost" d="${pathOf(f.map(at))}"/>`);
-    return out.join("");
+    const front = outline(F, DISH.t).map(at);
+    return `<path class="sl-ghost" d="${smoothPath(front)}"/>`;
   }
-  // back face
-  const back = [F.pp(-1, 1, 0), F.pp(1, 1, 0), F.pp(1, -1, 0), F.pp(-1, -1, 0)];
-  out.push(`<path class="sl-fill" d="${pathOf(back.map(at))}"/><path class="sl-sh" data-sh="3" d="${pathOf(back.map(at))}"/>`);
-  // rim faces back-to-front
-  const edges = [[-1,1,1,1],[1,1,1,-1],[1,-1,-1,-1],[-1,-1,-1,1]].map(([au,av,bu,bv]) => {
-    const c = [F.pp(au,av,PT), F.pp(bu,bv,PT), F.pp(bu,bv,0), F.pp(au,av,0)];
-    const nrm = norm(cross(add(F.pp(bu,bv,PT), F.pp(au,av,PT), -1), add(F.pp(au,av,0), F.pp(au,av,PT), -1)));
-    const z = c.reduce((t, p) => t + depthOf(p, P), 0) / 4;
-    return { c, sh: shadeOf(nrm), z };
-  }).sort((a, b) => a.z - b.z);
-  for (const e of edges)
-    out.push(`<path class="sl-fill" d="${pathOf(e.c.map(at))}"/><path class="sl-sh" data-sh="${e.sh}" d="${pathOf(e.c.map(at))}"/><path class="sl-edge" data-tone="faint" d="${pathOf(e.c.map(at))}"/>`);
-  // front array face
-  const front = [F.pp(-1,1,PT), F.pp(1,1,PT), F.pp(1,-1,PT), F.pp(-1,-1,PT)];
-  out.push(`<path class="sl-array" d="${pathOf(front.map(at))}"/>`);
-  out.push(`<path class="sl-sheen" d="${pathOf([F.pp(-0.96,0.96,PT+0.4),F.pp(0.96,0.96,PT+0.4),F.pp(0.9,0.62,PT+0.4),F.pp(-0.9,0.62,PT+0.4)].map(at))}"/>`);
-  out.push(`<path class="sl-bezel" d="${pathOf([F.pp(-0.9,0.9,PT+0.3),F.pp(0.9,0.9,PT+0.3),F.pp(0.9,-0.9,PT+0.3),F.pp(-0.9,-0.9,PT+0.3)].map(at))}"/>`);
-  // phased-array element grid, brightness scales with signal
-  const cells = [];
-  for (let i = 0; i < 24; i++) for (let j = 0; j < 21; j++) {
-    const u = -0.84 + (i / 23) * 1.68, v = -0.84 + (j / 20) * 1.68;
-    const [x, y] = at(F.pp(u, v, PT + 0.4));
-    cells.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="0.9"/>`);
-  }
-  out.push(`<g class="sl-cells" style="opacity:${(0.35 + 0.65 * signal).toFixed(2)}">${cells.join("")}</g>`);
-  // status LED
-  const led = at(F.pp(-0.74, -0.74, PT + 0.6));
-  out.push(`<circle class="sl-led" cx="${led[0].toFixed(1)}" cy="${led[1].toFixed(1)}" r="2.4"/>`);
-  out.push(`<path class="sl-edge" data-tone="hi" d="${pathOf(front.map(at))}"/>`);
+  const out = [];
+  const back = outline(F, 0).map(at);
+  const front = outline(F, DISH.t).map(at);
+  // thickness: rim fill = union silhouette (draw back, then front on top)
+  out.push(`<path class="sl-rim" d="${smoothPath(back)}"/>`);
+  // the dish face
+  out.push(`<path class="sl-face" d="${smoothPath(front)}"/>`);
+  // soft sheen: a highlight blob near the upper edge of the face
+  const hi = add(add([...CENTER], F.V, DISH.b * 0.42), F.N, DISH.t + 0.2);
+  const hl = add(add([...CENTER], F.U, -DISH.a * 0.3), F.N, DISH.t + 0.2);
+  const hc = at(add(hi, F.U, -DISH.a * 0.2));
+  out.push(`<ellipse class="sl-sheen" cx="${hc[0].toFixed(1)}" cy="${hc[1].toFixed(1)}" rx="${(DISH.a * 0.5 * P.scale).toFixed(1)}" ry="${(DISH.b * 0.26 * P.scale).toFixed(1)}" transform="rotate(${(-CAM.az).toFixed(1)} ${hc[0].toFixed(1)} ${hc[1].toFixed(1)})"/>`);
+  // centre hub + faint logo
+  const hub = at(add([...CENTER], F.N, DISH.t + 0.3));
+  out.push(`<circle class="sl-hub" cx="${hub[0].toFixed(1)}" cy="${hub[1].toFixed(1)}" r="${(3.2 * P.scale).toFixed(1)}"/>`);
+  const logoP = at(add(add([...CENTER], F.V, -DISH.b * 0.5), F.N, DISH.t + 0.3));
+  out.push(`<text class="sl-logo" x="${logoP[0].toFixed(1)}" y="${logoP[1].toFixed(1)}">STARLINK</text>`);
+  // face outline
+  out.push(`<path class="sl-edge" d="${smoothPath(front)}"/>`);
   return out.join("");
 }
 
-function kickstandSvg(P, azDeg, elDeg) {
+function mastSvg(P, azDeg, elDeg) {
   const F = frame(azDeg, elDeg);
   const at = (p) => iso(p, P);
   const out = [];
-  // ground shadow under the panel
+  // ground shadow
   const sh = [];
-  for (let a = 0; a < 24; a++) {
-    const t = (a / 24) * Math.PI * 2;
-    sh.push(at([CENTER[0] + Math.cos(t) * 52, CENTER[1] + 20 + Math.sin(t) * 30, 0]));
-  }
-  out.push(`<path class="sl-shadow" d="${pathOf(sh)}"/>`);
-  // flip-out leg from panel lower-back to the ground behind
-  const hinge = F.pp(0, -0.98, 0);
-  const foot = [CENTER[0], CENTER[1] + 46, 0];
-  const w = 3.2, perp = [ -1, 0, 0 ]; // leg width along x
-  const legA = [add(hinge, perp, w), add(hinge, perp, -w), add(foot, perp, -w), add(foot, perp, w)];
-  out.push(`<path class="sl-fill" d="${pathOf(legA.map(at))}"/><path class="sl-sh" data-sh="2" d="${pathOf(legA.map(at))}"/><path class="sl-edge" data-tone="faint" d="${pathOf(legA.map(at))}"/>`);
-  // foot pad + pivot
-  const fx = at(foot);
-  out.push(`<ellipse class="sl-foot" cx="${fx[0].toFixed(1)}" cy="${fx[1].toFixed(1)}" rx="7" ry="3.4"/>`);
-  const hx = at(hinge);
-  out.push(`<circle class="sl-pivot" cx="${hx[0].toFixed(1)}" cy="${hx[1].toFixed(1)}" r="2"/>`);
+  for (let i = 0; i < 28; i++) { const t = (i / 28) * Math.PI * 2; sh.push(at([BASE[0] + Math.cos(t) * 42, BASE[1] + Math.sin(t) * 20, 0])); }
+  out.push(`<path class="sl-shadow" d="${smoothPath(sh)}"/>`);
+  // base foot (flat oval)
+  const foot = [];
+  for (let i = 0; i < 28; i++) { const t = (i / 28) * Math.PI * 2; foot.push(at([BASE[0] + Math.cos(t) * 20, BASE[1] + Math.sin(t) * 11, 1.5])); }
+  out.push(`<path class="sl-base" d="${smoothPath(foot)}"/>`);
+  // mast: tapered neck from base up to the back of the dish
+  const top = add([...CENTER], F.N, -2);          // just behind the dish
+  const topS = at(top), baseS = at([BASE[0], BASE[1], 3]);
+  const dx = baseS[0] - topS[0], dy = baseS[1] - topS[1], len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const wt = 4.2 * P.scale, wb = 6.2 * P.scale;
+  out.push(`<path class="sl-mast" d="${
+    `M${(topS[0]+nx*wt).toFixed(1)} ${(topS[1]+ny*wt).toFixed(1)}` +
+    `L${(topS[0]-nx*wt).toFixed(1)} ${(topS[1]-ny*wt).toFixed(1)}` +
+    `L${(baseS[0]-nx*wb).toFixed(1)} ${(baseS[1]-ny*wb).toFixed(1)}` +
+    `L${(baseS[0]+nx*wb).toFixed(1)} ${(baseS[1]+ny*wb).toFixed(1)}Z`}"/>`);
+  out.push(`<path class="sl-mast-hi" d="${`M${(topS[0]+nx*wt).toFixed(1)} ${(topS[1]+ny*wt).toFixed(1)}L${(baseS[0]+nx*wb).toFixed(1)} ${(baseS[1]+ny*wb).toFixed(1)}`}"/>`);
   return out.join("");
 }
 
-// --- the card -------------------------------------------------------------
+function beamSvg(P, azDeg, elDeg, { signal = 1, restricted = false }) {
+  if (signal <= 0.02) return "";
+  const F = frame(azDeg, elDeg);
+  const at = (p) => iso(p, P);
+  const out = [];
+  const cls = restricted ? "sl-beam warn" : "sl-beam";
+  for (const off of [-0.5, 0, 0.5]) {
+    const a = add(add([...CENTER], F.U, off * DISH.a * 0.7), F.N, DISH.t);
+    const b = add(a, F.N, 120);
+    const pa = at(a), pb = at(b);
+    out.push(`<line class="${cls}" x1="${pa[0].toFixed(1)}" y1="${pa[1].toFixed(1)}" x2="${pb[0].toFixed(1)}" y2="${pb[1].toFixed(1)}" style="opacity:${(0.5 * signal).toFixed(2)}"/>`);
+  }
+  return out.join("");
+}
+
+// --- card -----------------------------------------------------------------
 const num = (s) => { const v = parseFloat(s); return Number.isFinite(v) ? v : null; };
 const TOKENS = {
   azimuth: (e) => /azimuth/.test(e) && !/desired/.test(e),
@@ -141,40 +156,36 @@ const TOKENS = {
   restricted: (e) => /bandwidth_restricted/.test(e),
   dl_reason: (e) => /dl_restricted_reason|downlink_restriction/.test(e),
   pop_ping: (e) => /(^|_)pop_ping/.test(e),
-  downlink: (e) => /downlink(_throughput)?$/.test(e) || /downlink$/.test(e),
-  uplink: (e) => /uplink(_throughput)?$/.test(e) || /uplink$/.test(e),
+  downlink: (e) => /downlink_throughput$|_downlink$/.test(e),
+  uplink: (e) => /uplink_throughput$|_uplink$/.test(e),
   clients: (e) => /_clients$|wifi_clients/.test(e),
 };
 
 class StarlinkLocalCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
-    this._cur = { az: 20, el: 55, sig: 0.8 };
+    this._cur = { az: 20, el: 55, sig: 0.7 };
     this._raf = 0;
     this.attachShadow({ mode: "open" });
     this.shadowRoot.innerHTML = this._shell();
-    this._svgPanel = this.shadowRoot.querySelector("#panel");
-    this._svgGhost = this.shadowRoot.querySelector("#ghost");
-    this._svgStand = this.shadowRoot.querySelector("#stand");
-    this._P = makeProjection(620, 400);
+    this._P = projection(620, 420);
+    this._g = {
+      mast: this.shadowRoot.querySelector("#mast"),
+      beam: this.shadowRoot.querySelector("#beam"),
+      ghost: this.shadowRoot.querySelector("#ghost"),
+      dish: this.shadowRoot.querySelector("#dish"),
+    };
   }
   getCardSize() { return 6; }
-
   set hass(hass) { this._hass = hass; this._read(); }
 
   _resolve() {
-    const h = this._hass, cfg = this._config.entities || {};
-    const found = {};
-    // explicit config wins
-    for (const key of Object.keys(TOKENS)) if (cfg[key]) found[key] = cfg[key];
-    // auto-discover remaining from starlink_local platform (or 'starlink' in id)
-    const ids = Object.keys(h.states || {});
-    const fromPlatform = (eid) => h.entities && h.entities[eid] && h.entities[eid].platform === "starlink_local";
-    for (const eid of ids) {
-      const belongs = fromPlatform(eid) || /starlink/.test(eid);
+    const h = this._hass, cfg = this._config.entities || {}, found = {};
+    for (const k of Object.keys(TOKENS)) if (cfg[k]) found[k] = cfg[k];
+    for (const eid of Object.keys(h.states || {})) {
+      const belongs = (h.entities && h.entities[eid] && h.entities[eid].platform === "starlink_local") || /starlink/.test(eid);
       if (!belongs) continue;
-      for (const key of Object.keys(TOKENS))
-        if (!found[key] && TOKENS[key](eid)) found[key] = eid;
+      for (const k of Object.keys(TOKENS)) if (!found[k] && TOKENS[k](eid)) found[k] = eid;
     }
     return found;
   }
@@ -183,82 +194,77 @@ class StarlinkLocalCard extends HTMLElement {
     if (!this._hass || !this._config) return;
     const h = this._hass, ids = this._resolve();
     const st = (id) => (id && h.states[id] ? h.states[id].state : null);
-    this._ids = ids;
     const az = num(st(ids.azimuth)), el = num(st(ids.elevation));
-    const daz = num(st(ids.desired_azimuth)), del = num(st(ids.desired_elevation));
-    let sig = num(st(ids.signal)); if (sig != null && sig > 1) sig = sig / 100;
-    const restrictedState = st(ids.restricted);
-    const restricted = restrictedState === "on" || restrictedState === "true";
+    let sig = num(st(ids.signal)); if (sig != null && sig > 1) sig /= 100;
+    const r = st(ids.restricted);
     this._target = {
-      az: az != null ? az : this._cur.az,
-      el: el != null ? el : this._cur.el,
-      daz, del,
-      sig: sig != null ? sig : 1,
-      obstruction: num(st(ids.obstruction)),
-      restricted,
-      reason: st(ids.dl_reason),
-      pop_ping: num(st(ids.pop_ping)),
-      downlink: num(st(ids.downlink)),
-      uplink: num(st(ids.uplink)),
-      clients: num(st(ids.clients)),
-      available: az != null || el != null,
+      az: az != null ? az : this._cur.az, el: el != null ? el : this._cur.el,
+      daz: num(st(ids.desired_azimuth)), del: num(st(ids.desired_elevation)),
+      sig: sig != null ? sig : 1, restricted: r === "on" || r === "true",
+      reason: st(ids.dl_reason), obstruction: num(st(ids.obstruction)),
+      pop_ping: num(st(ids.pop_ping)), downlink: num(st(ids.downlink)),
+      uplink: num(st(ids.uplink)), clients: num(st(ids.clients)),
     };
-    this._tick(true);
+    this._tick();
   }
 
-  _tick(start) {
+  _tick() {
     const t = this._target; if (!t) return;
-    const ease = (a, b) => a + (b - a) * 0.18;
-    this._cur.az = ease(this._cur.az, t.az);
-    this._cur.el = ease(this._cur.el, t.el);
-    this._cur.sig = ease(this._cur.sig, t.sig);
+    const e = (a, b) => a + (b - a) * 0.16;
+    this._cur.az = e(this._cur.az, t.az); this._cur.el = e(this._cur.el, t.el); this._cur.sig = e(this._cur.sig, t.sig);
     this._draw();
-    const settled = Math.abs(this._cur.az - t.az) < 0.05 &&
-                    Math.abs(this._cur.el - t.el) < 0.05 &&
-                    Math.abs(this._cur.sig - t.sig) < 0.005;
-    if (!settled) { cancelAnimationFrame(this._raf); this._raf = requestAnimationFrame(() => this._tick(false)); }
-    else if (start) this._draw();
+    const done = Math.abs(this._cur.az - t.az) < 0.05 && Math.abs(this._cur.el - t.el) < 0.05 && Math.abs(this._cur.sig - t.sig) < 0.004;
+    cancelAnimationFrame(this._raf);
+    if (!done) this._raf = requestAnimationFrame(() => this._tick());
   }
 
   _draw() {
-    const t = this._target, P = this._P;
-    this._svgStand.innerHTML = kickstandSvg(P, this._cur.az, this._cur.el);
-    this._svgPanel.innerHTML = panelSvg(P, this._cur.az, this._cur.el, { signal: this._cur.sig });
-    this._svgGhost.innerHTML =
-      (t.daz != null && t.del != null && (Math.abs(t.daz - t.az) > 1.5 || Math.abs(t.del - t.el) > 1.5))
-        ? panelSvg(P, t.daz, t.del, { ghost: true }) : "";
-    this._svgPanel.closest("svg").dataset.restricted = t.restricted ? "1" : "0";
+    const t = this._target, P = this._P, az = this._cur.az, el = this._cur.el;
+    this._g.mast.innerHTML = mastSvg(P, az, el);
+    this._g.beam.innerHTML = beamSvg(P, az, el, { signal: this._cur.sig, restricted: t.restricted });
+    this._g.ghost.innerHTML = (t.daz != null && t.del != null && (Math.abs(t.daz - t.az) > 1.5 || Math.abs(t.del - t.el) > 1.5)) ? dishSvg(P, t.daz, t.del, { ghost: true }) : "";
+    this._g.dish.innerHTML = dishSvg(P, az, el, { signal: this._cur.sig, restricted: t.restricted });
     this._paint(t);
   }
 
   _paint(t) {
-    const set = (sel, text) => { const el = this.shadowRoot.querySelector(sel); if (el && el.textContent !== text) el.textContent = text; };
-    const fmt = (v, u, d = 0) => (v == null ? "—" : `${v.toFixed(d)}${u}`);
-    const mbps = (bps) => (bps == null ? "—" : `${(bps / 1e6).toFixed(bps < 1e7 ? 2 : 1)} Mb/s`);
+    const set = (s, v) => { const el = this.shadowRoot.querySelector(s); if (el && el.textContent !== v) el.textContent = v; };
+    const mbps = (b) => (b == null ? "—" : `${(b / 1e6).toFixed(b < 1e7 ? 2 : 1)} Mb/s`);
     set("#r-az", t.az != null ? `${Math.round(t.az)}°` : "—");
     set("#r-el", t.el != null ? `${Math.round(t.el)}°` : "—");
-    set("#r-sig", fmt(t.sig * 100, "%"));
-    set("#r-ping", fmt(t.pop_ping, " ms"));
+    set("#r-sig", t.sig == null ? "—" : `${Math.round(t.sig * 100)}%`);
+    set("#r-ping", t.pop_ping == null ? "—" : `${Math.round(t.pop_ping)} ms`);
     set("#r-down", mbps(t.downlink));
     set("#r-up", mbps(t.uplink));
-    set("#r-clients", t.clients != null ? String(t.clients) : "—");
+    set("#r-clients", t.clients == null ? "—" : String(t.clients));
     const badge = this.shadowRoot.querySelector("#badge");
     if (t.restricted) { badge.hidden = false; badge.textContent = "⚠ Banda restrita" + (t.reason && t.reason !== "NONE" ? ` · ${t.reason}` : ""); }
     else badge.hidden = true;
     const off = (t.daz != null && t.del != null) ? Math.round(Math.abs(t.daz - t.az) + Math.abs(t.del - t.el)) : null;
     set("#aim", off == null ? "" : off <= 3 ? "Alinhado" : `Desalinhado ${off}°`);
     const title = this.shadowRoot.querySelector("#title");
-    if (title) title.textContent = this._config.title || "Starlink Mini";
+    if (title) title.textContent = this._config.title || "Starlink";
   }
 
   _shell() {
     return `<style>${CARD_CSS}</style>
     <ha-card>
       <div class="wrap">
-        <div class="head"><span id="title">Starlink Mini</span><span id="aim" class="aim"></span></div>
+        <div class="head"><span id="title">Starlink</span><span id="aim" class="aim"></span></div>
         <div id="badge" class="badge" hidden></div>
-        <svg viewBox="0 0 620 400" preserveAspectRatio="xMidYMid meet" aria-label="Starlink Mini">
-          <g id="stand"></g><g id="ghost"></g><g id="panel"></g>
+        <svg viewBox="0 0 620 420" preserveAspectRatio="xMidYMid meet" aria-label="Starlink dish">
+          <defs>
+            <linearGradient id="slFace" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#ffffff"/><stop offset="0.55" stop-color="#eef1f6"/><stop offset="1" stop-color="#d4dae4"/>
+            </linearGradient>
+            <linearGradient id="slMast" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#e9edf3"/><stop offset="1" stop-color="#c4ccd9"/>
+            </linearGradient>
+            <radialGradient id="slHub" cx="0.4" cy="0.35" r="0.7">
+              <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9d1dd"/>
+            </radialGradient>
+          </defs>
+          <g id="mast"></g><g id="beam"></g><g id="ghost"></g><g id="dish"></g>
         </svg>
         <div class="readout">
           <div><label>Azimute</label><b id="r-az">—</b></div>
@@ -284,44 +290,29 @@ ha-card{overflow:hidden}
 .badge{margin:8px 0 2px;padding:6px 10px;border-radius:8px;font-size:.82rem;font-weight:600;
   background:rgba(245,166,35,.16);color:#f0a500;border:1px solid rgba(245,166,35,.4)}
 svg{width:100%;height:auto;display:block}
-.readout{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px;margin-top:6px}
+.sl-shadow{fill:rgba(15,22,38,.22);filter:blur(5px)}
+.sl-base{fill:#c9d1dd;stroke:#aab4c4;stroke-width:1}
+.sl-mast{fill:url(#slMast);stroke:#b2bbca;stroke-width:1}
+.sl-mast-hi{fill:none;stroke:#ffffff;stroke-width:1.1;opacity:.5}
+.sl-rim{fill:#b9c2d1}
+.sl-face{fill:url(#slFace);stroke:none}
+.sl-edge{fill:none;stroke:#aeb8c8;stroke-width:1.3}
+.sl-sheen{fill:#ffffff;opacity:.45}
+.sl-hub{fill:url(#slHub);stroke:#bcc5d3;stroke-width:.8}
+.sl-logo{fill:#9aa4b5;font:600 7px/1 -apple-system,system-ui,sans-serif;letter-spacing:1.5px;text-anchor:middle;opacity:.8}
+.sl-ghost{fill:none;stroke:var(--primary-color,#8ab4ff);stroke-width:1.4;stroke-dasharray:5 5;opacity:.55}
+.sl-beam{stroke:#8ab4ff;stroke-width:2;stroke-linecap:round}
+.sl-beam.warn{stroke:#f0a500}
+.readout{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px;margin-top:4px}
 .readout div{display:flex;flex-direction:column}
 .readout label{font-size:.68rem;color:var(--secondary-text-color);text-transform:uppercase;letter-spacing:.04em}
 .readout b{font-size:.98rem;font-variant-numeric:tabular-nums}
-/* isometric palette, theme-aware via HA vars with fallbacks */
-.sl-fill{fill:var(--card-background-color,#14161c)}
-.sl-sh{stroke:none}
-.sl-sh[data-sh="0"]{fill:#2b3345}.sl-sh[data-sh="1"]{fill:#232a39}
-.sl-sh[data-sh="2"]{fill:#1b2130}.sl-sh[data-sh="3"]{fill:#141926}
-.sl-edge{fill:none;stroke:#3a4760;stroke-width:1}
-.sl-edge[data-tone="hi"]{stroke:#6b7a96;stroke-width:1.2}
-.sl-edge[data-tone="faint"]{stroke:#2a3140}
-.sl-array{fill:#1b2130}
-.sl-sheen{fill:#2a3346;opacity:.55}
-.sl-bezel{fill:none;stroke:#39465f;stroke-width:1}
-.sl-cells circle{fill:#4a5a78}
-.sl-led{fill:#39d98a;filter:drop-shadow(0 0 4px #39d98a)}
-.sl-ghost{fill:none;stroke:var(--primary-color,#6b7a96);stroke-width:1.4;stroke-dasharray:4 4;opacity:.5}
-.sl-shadow{fill:rgba(0,0,0,.28);filter:blur(5px)}
-.sl-foot{fill:#1b2130;stroke:#3a4760;stroke-width:.8}
-.sl-pivot{fill:#2b3345;stroke:#3a4760;stroke-width:.8}
-svg[data-restricted="1"] .sl-led{fill:#f0a500;filter:drop-shadow(0 0 5px #f0a500)}
-@media (prefers-color-scheme: light){
-  .sl-sh[data-sh="0"]{fill:#e7edf6}.sl-sh[data-sh="1"]{fill:#d7deea}
-  .sl-sh[data-sh="2"]{fill:#c6d0e0}.sl-sh[data-sh="3"]{fill:#b4c0d4}
-  .sl-edge{stroke:#9fb0c8}.sl-edge[data-tone="hi"]{stroke:#5f708c}
-  .sl-array{fill:#cfd8e6}.sl-sheen{fill:#eef2f8;opacity:.7}
-  .sl-bezel{stroke:#9fb0c8}.sl-cells circle{fill:#8fa0ba}
-  .sl-shadow{fill:rgba(40,50,70,.18)}
-  .sl-foot{fill:#cfd8e6;stroke:#9fb0c8}.sl-pivot{fill:#b4c0d4;stroke:#9fb0c8}
+@media (prefers-color-scheme:dark){
+  .sl-shadow{fill:rgba(0,0,0,.4)}
+  .sl-base{fill:#aeb7c6;stroke:#8c97a9}
 }`;
 
 customElements.define("starlink-local-card", StarlinkLocalCard);
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "starlink-local-card",
-  name: "Starlink Local Card",
-  description: "Antena Starlink Mini isométrica, animada pelo estado da integração starlink_local.",
-  preview: true,
-});
-console.info("%c STARLINK-LOCAL-CARD %c v0.1.0 ", "background:#39d98a;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
+window.customCards.push({ type: "starlink-local-card", name: "Starlink Local Card", description: "Antena Starlink que aponta pro az/el real da integração starlink_local.", preview: true });
+console.info("%c STARLINK-LOCAL-CARD %c v0.2.0 ", "background:#8ab4ff;color:#000;border-radius:3px 0 0 3px;padding:2px 4px", "background:#1b2130;color:#fff;border-radius:0 3px 3px 0;padding:2px 4px");
