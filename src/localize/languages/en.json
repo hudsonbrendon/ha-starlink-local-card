@@ -42,6 +42,7 @@
   "editor": {
     "device": "Dish device",
     "name": "Name",
+    "weather_entity": "Weather entity (sky)",
     "show_name": "Show name",
     "show_status": "Show status",
     "show_toolbar": "Show toolbar",

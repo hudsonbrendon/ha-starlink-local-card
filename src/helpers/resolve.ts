@@ -111,9 +111,3 @@ export function signalRatio(hass: HassObject | undefined, e: ResolvedEntities): 
   const value = numeric(hass, e.signal_quality);
   return value === null ? 0 : Math.max(0, Math.min(1, value / 100));
 }
-
-/** Panel tilt drawn from the elevation: 90° faces the sky (flat), 0° faces the viewer. */
-export function faceHeight(elevation: number | null): number {
-  const el = elevation ?? 60;
-  return 0.38 + 0.62 * Math.cos((Math.max(0, Math.min(90, el)) * Math.PI) / 180);
-}

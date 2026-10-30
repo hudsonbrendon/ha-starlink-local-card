@@ -2,7 +2,8 @@ import { LitElement, html, nothing, type PropertyValues, type TemplateResult } f
 import { customElement, property, state } from "lit/decorators.js";
 import { dishSvg } from "./assets/dish-svg";
 import { CARD_NAME, CARD_VERSION, PLATFORM, type EntityKey, type StarlinkState } from "./const";
-import { computeState, faceHeight, mbps, numeric, resolveEntities, signalRatio } from "./helpers/resolve";
+import { computeState, mbps, numeric, resolveEntities, signalRatio } from "./helpers/resolve";
+import { findWeather, skyPosition, weatherScene } from "./helpers/sky";
 import { localize, resolveLanguage } from "./localize";
 import { cardStyles } from "./styles";
 import type { HassObject, HassState, ResolvedEntities, ShortcutConfig, StarlinkCardConfig, StatConfig } from "./types";
@@ -59,6 +60,7 @@ export class StarlinkLocalCard extends LitElement {
       schema: [
         { name: "device", selector: { device: { filter: { integration: PLATFORM } } } },
         { name: "name", selector: { text: {} } },
+        { name: "weather_entity", selector: { entity: { filter: { domain: "weather" } } } },
         {
           type: "grid",
           name: "",
@@ -122,7 +124,8 @@ export class StarlinkLocalCard extends LitElement {
     if (changed.has("_config")) return true;
     const before = changed.get("hass") as HassObject | undefined;
     if (!before || !this.hass) return true;
-    return Object.values(this._entities).some((id) => id && before.states[id] !== this.hass!.states[id]);
+    const ids = [...Object.values(this._entities), "sun.sun", findWeather(this.hass, this._config.weather_entity)];
+    return ids.some((id) => id && before.states[id] !== this.hass!.states[id]);
   }
 
   // ── helpers ──────────────────────────────────────────────────────────────
@@ -154,6 +157,16 @@ export class StarlinkLocalCard extends LitElement {
     }
     const unit = stateObj.attributes.unit_of_measurement;
     return unit ? `${stateObj.state} ${unit}` : stateObj.state;
+  }
+
+  private get _weather() {
+    return weatherScene(this.hass, findWeather(this.hass, this._config.weather_entity));
+  }
+
+  private _sceneClass(dishState: StarlinkState): string {
+    const sun = this.hass?.states["sun.sun"]?.state;
+    const night = sun ? sun !== "above_horizon" : new Date().getHours() < 6 || new Date().getHours() >= 18;
+    return night ? `${dishState} night` : dishState;
   }
 
   private _moreInfo(entityId?: string): void {
@@ -193,13 +206,14 @@ export class StarlinkLocalCard extends LitElement {
     const signal = signalRatio(this.hass, this._entities);
     const azimuth = numeric(this.hass, this._entities.azimuth);
     const elevation = dishState === "stowed" ? 90 : numeric(this.hass, this._entities.elevation);
-    const pose = {
-      face: faceHeight(elevation),
-      azimuth,
-      desiredAzimuth: numeric(this.hass, this._entities.desired_azimuth),
-    };
+    const pose = { elevation, azimuth, desiredAzimuth: numeric(this.hass, this._entities.desired_azimuth) };
+    const sky = skyPosition(this.hass);
+    // the satellite crosses faster the better the link
+    const style =
+      `--slc-signal:${signal.toFixed(2)};--slc-sun-i:${sky.intensity.toFixed(2)};` +
+      `--slc-orbit:${(12 - 5 * signal).toFixed(1)}s`;
     return html`
-      <ha-card style="--slc-signal:${signal.toFixed(2)}">
+      <ha-card style=${style}>
         <div class="preview">
           <div class="header">
             <div class="tips">${this._renderTips()}</div>
@@ -213,7 +227,7 @@ export class StarlinkLocalCard extends LitElement {
           </div>
           ${this._config.compact_view
             ? nothing
-            : html`<div class="hero" @click=${() => this._moreInfo()}>${dishSvg(dishState, pose)}</div>`}
+            : html`<div class="hero" @click=${() => this._moreInfo()}>${dishSvg(this._sceneClass(dishState), pose, this._weather, sky)}</div>`}
           <div class="metadata">
             ${this._renderName()} ${this._renderStatus(dishState, signal, azimuth, elevation)}
           </div>
@@ -230,7 +244,7 @@ export class StarlinkLocalCard extends LitElement {
         <div class="preview not-available">
           ${this._config.compact_view
             ? nothing
-            : html`<div class="hero">${dishSvg("unavailable", { face: faceHeight(60), azimuth: null, desiredAzimuth: null })}</div>`}
+            : html`<div class="hero">${dishSvg(this._sceneClass("unavailable"), { elevation: null, azimuth: null, desiredAzimuth: null }, this._weather, skyPosition(this.hass))}</div>`}
           <div class="metadata">
             ${this._renderName()}
             <div class="status">${localize("common.not_available", this._lang)}</div>

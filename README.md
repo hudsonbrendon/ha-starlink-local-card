@@ -10,14 +10,18 @@ Lovelace card for a Starlink dish running the
 the vacuum, HP printer and Intelbras solar cards: tips row, animated
 illustration, name + status, stats and a toolbar.
 
-- **Animated dish**: a Starlink Mini reclined to the real elevation, a compass
-  needle on the azimuth (dashed line on the desired azimuth), signal waves
-  pulsing up and a satellite crossing the sky while connected. Amber waves
-  when bandwidth is restricted or alerts are active, a tree in the way and
-  stuttering waves when obstructed, faint waves and a blinking LED while
-  searching, warm glow and melting snow when heating, red LED + warning on
-  thermal throttling, "z z" when sleeping, flat when stowed, greyed out when
-  unavailable. Respects `prefers-reduced-motion` and dark mode.
+- **Animated scene**: a Starlink Mini on its kickstand, reclined to the real
+  elevation, with a satellite orbiting overhead and a data beam down to the
+  dish while connected (faster passes with better signal), data flowing down
+  the cable to the router and Wi-Fi rising from it. The sky follows `sun.sun`
+  (sun / moon on its arc, stars at night) and the weather entity (clouds,
+  rain, storm, snow, fog, wind). A compass needle shows the azimuth (dashed
+  line on the desired azimuth). Amber beam when bandwidth is restricted,
+  alerts are active or the view is obstructed (the beam then drops for part of
+  every pass), faint waves and a blinking LED while searching, warm glow and
+  melting snow when heating, red LED + warning on thermal throttling, "z z"
+  when sleeping, flat when stowed, greyed out when unavailable. Respects
+  `prefers-reduced-motion` and dark mode.
 - **Tips**: PoP ping, Wi-Fi clients, GPS satellites and the restriction reason.
 - **Signal bar** (signal quality) and alignment (azimuth / elevation).
 - **Stats** per state: download / upload (Mbps) / ping; obstruction first when
@@ -51,6 +55,7 @@ device: 2851588888…   # the "Starlink Dish" device (pick it in the visual edit
 | `device` | — | Device id of the dish. Router entities of the same entry are found automatically. |
 | `entities` | — | Explicit overrides per key (`downlink`, `uplink`, `pop_ping`, `signal_quality`, `obstruction`, `azimuth`, `elevation`, `clients`, `stowed`, `reboot`...). Without `device`, `entities.downlink` or `entities.pop_ping` is required. |
 | `name` | device name | Title shown under the illustration. |
+| `weather_entity` | auto (`weather.*`) | Weather entity that drives the sky (clouds, rain, snow, fog). |
 | `show_name` / `show_status` / `show_toolbar` | `true` | Toggle sections. |
 | `compact_view` | `false` | Hide the illustration and stats. |
 | `language` | HA language | Force `en` or `pt-BR`. |

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import "../src/starlink-local-card";
 import { CARD_NAME } from "../src/const";
-import { computeState, faceHeight, mbps, resolveEntities, signalRatio } from "../src/helpers/resolve";
+import { computeState, mbps, resolveEntities, signalRatio } from "../src/helpers/resolve";
 import { localize } from "../src/localize";
 import { DISH, mockHass, type MockOpts } from "./fixtures/hass";
 import type { StarlinkCardConfig } from "../src/types";
@@ -104,9 +104,6 @@ describe("helpers", () => {
     expect(mbps(hass, "sensor.none")).toBeNull();
     expect(signalRatio(hass, resolveEntities(hass, { type: "x", device: DISH }))).toBeCloseTo(0.92);
     expect(signalRatio(hass, {})).toBe(0);
-    expect(faceHeight(0)).toBeCloseTo(1);
-    expect(faceHeight(90)).toBeCloseTo(0.38);
-    expect(faceHeight(null)).toBeCloseTo(0.69);
   });
 });
 

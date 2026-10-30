@@ -42,6 +42,7 @@
   "editor": {
     "device": "Dispositivo da antena",
     "name": "Nome",
+    "weather_entity": "Entidade de clima (céu)",
     "show_name": "Mostrar nome",
     "show_status": "Mostrar status",
     "show_toolbar": "Mostrar barra de ações",

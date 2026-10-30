@@ -19,6 +19,13 @@ export const cardStyles = css`
     --slc-outline: #9aa0a6;
     --slc-signal: 0;
     --slc-sheen: 0.55;
+    --slc-sun: #ffb300;
+    --slc-sun-low: #ff7043;
+    --slc-cloud: #ffffff;
+    --slc-cloud-dark: #d5d9de;
+    --slc-rain: #90a4ae;
+    --slc-sun-i: 1;
+    --slc-orbit: 9s;
     display: flex;
     flex: 1;
     flex-direction: column;
@@ -30,6 +37,9 @@ export const cardStyles = css`
     --slc-panel: #262a30;
     --slc-outline: #6b7178;
     --slc-sheen: 0.12;
+    --slc-cloud: #5a6068;
+    --slc-cloud-dark: #464b53;
+    --slc-rain: #8a9fb0;
   }
 
   ha-card {
@@ -98,6 +108,11 @@ export const cardStyles = css`
     height: auto;
     overflow: visible;
   }
+  .dish .ground {
+    stroke: var(--slc-edge);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
   .dish .logo {
     font: 700 7px Arial, Helvetica, sans-serif;
     letter-spacing: 2.6px;
@@ -107,6 +122,25 @@ export const cardStyles = css`
     fill: var(--slc-outline);
     transition: fill 0.4s ease;
   }
+  .dish .stand {
+    stroke: var(--slc-outline);
+    stroke-width: 5;
+    stroke-linecap: round;
+  }
+  .dish .cable {
+    fill: none;
+    stroke: var(--slc-outline);
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .dish .flow {
+    fill: none;
+    stroke: var(--slc-accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 3 9;
+    opacity: 0;
+  }
   .dish .wave {
     fill: none;
     stroke: var(--slc-accent);
@@ -114,6 +148,11 @@ export const cardStyles = css`
     stroke-linecap: round;
     opacity: 0;
   }
+  .dish .wifi .wave {
+    stroke-width: 2.4;
+  }
+
+  /* satellite: a small Starlink with two long wings */
   .dish .sat-body {
     fill: var(--slc-face);
     stroke: var(--slc-outline);
@@ -124,28 +163,30 @@ export const cardStyles = css`
     stroke: var(--slc-outline);
     stroke-width: 1;
   }
-  .dish .sat-line {
+  .dish .sat-line,
+  .dish .sat-cell {
     stroke: var(--slc-outline);
-    stroke-width: 1.2;
+    stroke-width: 1;
   }
-  .dish .trunk {
-    fill: var(--slc-edge);
-    stroke: var(--slc-outline);
-    stroke-width: 1.2;
+  .dish .sat-cell {
+    stroke: var(--slc-face);
   }
-  .dish .canopy-outline {
-    fill: var(--slc-outline);
-    stroke: var(--slc-outline);
-    stroke-width: 2.6;
+  .dish .sat-led {
+    fill: var(--slc-accent);
   }
-  .dish .canopy-fill {
-    fill: var(--slc-face);
+  .dish .beam {
+    stroke: var(--slc-accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 2 6;
+    opacity: 0;
   }
+
   .dish .heat {
     fill: #ffb74d;
     opacity: 0;
   }
-  .dish .snow circle {
+  .dish .snow-face circle {
     fill: #ffffff;
     stroke: var(--slc-outline);
     stroke-width: 0.6;
@@ -177,45 +218,221 @@ export const cardStyles = css`
   .dish .zz2 {
     font-size: 12px;
   }
-  .dish .sat,
-  .dish .tree,
-  .dish .snow,
+  .dish .orbit,
+  .dish .snow-face,
   .dish .zz,
   .dish .warn {
     display: none;
   }
 
-  /* online / limited / alert / obstructed: waves pulse up, a satellite crosses */
-  .dish.online .wave,
-  .dish.limited .wave,
-  .dish.alert .wave,
-  .dish.obstructed .wave,
-  .dish.heating .wave,
-  .dish.thermal .wave {
+  /* ── sky: the sun follows sun.sun; low sun is orange and dim, high sun yellow */
+  .dish .body {
+    transition: transform 2s ease;
+  }
+  .dish .sun {
+    --slc-sun-color: color-mix(in srgb, var(--slc-sun) calc(var(--slc-sun-i) * 100%), var(--slc-sun-low));
+    transition: opacity 0.8s ease;
+  }
+  .dish .sun-core {
+    fill: var(--slc-sun-color);
+  }
+  .dish .sun-rays {
+    stroke: var(--slc-sun-color);
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: spin 24s linear infinite;
+  }
+  .dish .sun-glow {
+    opacity: calc(0.2 + var(--slc-sun-i) * 0.8);
+  }
+  .dish .moon,
+  .dish .stars {
+    opacity: 0;
+  }
+  .dish .moon path,
+  .dish .star {
+    fill: var(--slc-outline);
+  }
+  .dish.night .body .sun {
+    opacity: 0;
+  }
+  .dish.night .moon,
+  .dish.night.wx-clear .stars,
+  .dish.night.wx-wind .stars {
+    opacity: 1;
+  }
+  .dish.night .star {
+    animation: twinkle 3s ease-in-out infinite;
+  }
+  .dish.night .s2 {
+    animation-delay: 1s;
+  }
+  .dish.night .s3 {
+    animation-delay: 2s;
+  }
+
+  /* ── weather (wx-*: clear, partly, cloudy, fog, rain, pour, storm, snow, wind) */
+  .dish .cloud,
+  .dish .rain,
+  .dish .snow,
+  .dish .fog,
+  .dish .bolt {
+    display: none;
+  }
+  .dish .cloud-outline {
+    fill: var(--slc-outline);
+    stroke: var(--slc-outline);
+    stroke-width: 2.6;
+  }
+  .dish .cloud-fill {
+    fill: var(--slc-cloud);
+  }
+  .dish .drift {
+    animation: drift 9s ease-in-out infinite alternate;
+  }
+  .dish .c2 .drift {
+    animation-duration: 12s;
+    animation-delay: -4s;
+  }
+  .dish .c3 .drift {
+    animation-duration: 10s;
+    animation-delay: -7s;
+  }
+  .dish.wx-partly .c-near,
+  .dish.wx-wind .c-near,
+  .dish.wx-wind .c3,
+  .dish.wx-cloudy .cloud,
+  .dish.wx-rain .cloud,
+  .dish.wx-pour .cloud,
+  .dish.wx-storm .cloud,
+  .dish.wx-snow .cloud {
+    display: inline;
+  }
+  .dish.wx-cloudy .sun,
+  .dish.wx-rain .sun,
+  .dish.wx-snow .sun {
+    opacity: 0.35;
+  }
+  .dish.wx-pour .sun,
+  .dish.wx-storm .sun {
+    opacity: 0.15;
+  }
+  .dish.wx-fog .sun {
+    opacity: 0.5;
+  }
+  .dish.wx-rain .cloud-fill,
+  .dish.wx-pour .cloud-fill,
+  .dish.wx-storm .cloud-fill {
+    fill: var(--slc-cloud-dark);
+  }
+  .dish.wx-wind .drift {
+    animation-duration: 3s;
+  }
+  .dish.wx-rain .rain,
+  .dish.wx-pour .rain,
+  .dish.wx-storm .rain {
+    display: inline;
+  }
+  .dish .drop {
+    stroke: var(--slc-rain);
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0;
+    animation: fall 1.1s linear infinite;
+  }
+  .dish.wx-rain .drop.heavy {
+    display: none;
+  }
+  .dish.wx-pour .drop,
+  .dish.wx-storm .drop {
+    animation-duration: 0.7s;
+  }
+  .dish.wx-storm .bolt {
+    display: inline;
+    fill: var(--slc-sun);
+    opacity: 0;
+    animation: flash 4s linear infinite;
+  }
+  .dish.wx-snow .snow {
+    display: inline;
+  }
+  .dish .flake {
+    fill: var(--slc-cloud);
+    stroke: var(--slc-outline);
+    stroke-width: 0.6;
+    opacity: 0;
+    animation: snowfall 3.6s linear infinite;
+  }
+  .dish.wx-fog .fog {
+    display: inline;
+  }
+  .dish .fog line {
+    stroke: var(--slc-outline);
+    stroke-width: 4;
+    stroke-linecap: round;
+    opacity: 0.55;
+    animation: drift 6s ease-in-out infinite alternate;
+  }
+  .dish .fog line:nth-child(even) {
+    animation-delay: -3s;
+  }
+
+  /* ── dish state */
+  /* connected: the satellite crosses overhead, the beam lights up while it is
+     in view, data flows down the cable and the router broadcasts Wi-Fi */
+  .dish.online .orbit,
+  .dish.limited .orbit,
+  .dish.alert .orbit,
+  .dish.obstructed .orbit,
+  .dish.heating .orbit,
+  .dish.thermal .orbit {
+    display: inline;
+    animation: orbit var(--slc-orbit) linear infinite;
+  }
+  .dish .sat {
+    animation: level var(--slc-orbit) linear infinite;
+  }
+  .dish .beam {
+    animation:
+      beam var(--slc-orbit) linear infinite,
+      dash 0.8s linear infinite;
+  }
+  .dish.online .flow,
+  .dish.limited .flow,
+  .dish.alert .flow,
+  .dish.obstructed .flow,
+  .dish.heating .flow,
+  .dish.thermal .flow {
+    opacity: 1;
+    animation: dash 1.2s linear infinite;
+  }
+  .dish.online .wifi .wave,
+  .dish.limited .wifi .wave,
+  .dish.alert .wifi .wave,
+  .dish.obstructed .wifi .wave,
+  .dish.heating .wifi .wave,
+  .dish.thermal .wifi .wave {
     animation: wave 2.4s ease-out infinite;
   }
-  .dish .w2 {
+  .dish .w2,
+  .dish .f2 {
     animation-delay: 0.4s !important;
   }
-  .dish .w3 {
+  .dish .w3,
+  .dish .f3 {
     animation-delay: 0.8s !important;
-  }
-  .dish.online .sat,
-  .dish.limited .sat,
-  .dish.alert .sat,
-  .dish.obstructed .sat,
-  .dish.heating .sat {
-    display: inline;
-    animation: orbit 16s linear infinite;
   }
   .dish.online .led,
   .dish.heating .led {
     fill: var(--slc-ok);
     animation: breathe 2s ease-in-out infinite;
   }
-  .dish.limited .wave,
-  .dish.alert .wave,
-  .dish.obstructed .wave {
+  .dish.limited .beam,
+  .dish.alert .beam,
+  .dish.obstructed .beam,
+  .dish.limited .flow,
+  .dish.alert .flow,
+  .dish.obstructed .flow {
     stroke: var(--slc-warning);
   }
   .dish.limited .led,
@@ -223,17 +440,15 @@ export const cardStyles = css`
   .dish.obstructed .led {
     fill: var(--slc-warning);
   }
-  /* obstructed: a tree in the way, waves stutter */
-  .dish.obstructed .tree {
-    display: inline;
+  /* obstructed: the beam drops for part of every pass */
+  .dish.obstructed .beam {
+    animation:
+      beam-blocked var(--slc-orbit) linear infinite,
+      dash 0.8s linear infinite;
   }
-  .dish.obstructed .w3 {
-    animation-name: stutter;
-  }
-  /* searching: faint waves, blinking LED, no satellite */
-  .dish.searching .wave {
-    animation: breathe 2.4s ease-in-out infinite;
-    opacity: 0.3;
+  /* searching: no satellite, faint waves from the dish, blinking LED */
+  .dish.searching .waves .wave {
+    animation: wave 2.4s ease-out infinite;
   }
   .dish.searching .led {
     fill: var(--slc-accent);
@@ -243,7 +458,7 @@ export const cardStyles = css`
   .dish.heating .heat {
     animation: warm 3s ease-in-out infinite;
   }
-  .dish.heating .snow {
+  .dish.heating .snow-face {
     display: inline;
     animation: melt 3s ease-in infinite;
   }
@@ -256,7 +471,7 @@ export const cardStyles = css`
     display: inline;
     animation: breathe 1.2s ease-in-out infinite;
   }
-  /* sleeping: z z, LED off */
+  /* sleeping: z z, LEDs off */
   .dish.sleeping .zz {
     display: inline;
     animation: zz 2.4s ease-in-out infinite;
@@ -268,6 +483,58 @@ export const cardStyles = css`
     opacity: 0.45;
   }
 
+  @keyframes orbit {
+    from {
+      transform: rotate(-64deg);
+    }
+    to {
+      transform: rotate(64deg);
+    }
+  }
+  /* keeps the satellite roughly level while the arm sweeps */
+  @keyframes level {
+    0% {
+      transform: rotate(48deg);
+      opacity: 0;
+    }
+    8%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      transform: rotate(-48deg);
+      opacity: 0;
+    }
+  }
+  @keyframes beam {
+    0%,
+    14%,
+    86%,
+    100% {
+      opacity: 0;
+    }
+    24%,
+    76% {
+      opacity: 0.9;
+    }
+  }
+  @keyframes beam-blocked {
+    0%,
+    44%,
+    86%,
+    100% {
+      opacity: 0;
+    }
+    54%,
+    76% {
+      opacity: 0.9;
+    }
+  }
+  @keyframes dash {
+    to {
+      stroke-dashoffset: -24;
+    }
+  }
   @keyframes wave {
     0% {
       opacity: 0;
@@ -279,39 +546,73 @@ export const cardStyles = css`
       opacity: 0;
     }
   }
-  @keyframes stutter {
-    0%,
-    40%,
-    100% {
-      opacity: 0;
-    }
-    20% {
-      opacity: 0.6;
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
   }
-  @keyframes orbit {
+  @keyframes drift {
+    from {
+      transform: translateX(-6px);
+    }
+    to {
+      transform: translateX(6px);
+    }
+  }
+  @keyframes fall {
     0% {
-      transform: translate(18px, 52px) rotate(-12deg);
+      transform: translate(0, 0);
       opacity: 0;
     }
-    8% {
+    10% {
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-8px, 72px);
+      opacity: 0;
+    }
+  }
+  @keyframes snowfall {
+    0% {
+      transform: translate(0, 0);
+      opacity: 0;
+    }
+    15% {
       opacity: 1;
     }
     50% {
-      transform: translate(160px, 16px) rotate(0deg);
-    }
-    92% {
-      opacity: 1;
+      transform: translate(5px, 36px);
     }
     100% {
-      transform: translate(302px, 52px) rotate(12deg);
+      transform: translate(-3px, 72px);
       opacity: 0;
+    }
+  }
+  @keyframes flash {
+    0%,
+    86%,
+    90%,
+    100% {
+      opacity: 0;
+    }
+    87%,
+    92% {
+      opacity: 1;
     }
   }
   @keyframes breathe {
     0%,
     100% {
       opacity: 0.4;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @keyframes twinkle {
+    0%,
+    100% {
+      opacity: 0.3;
     }
     50% {
       opacity: 1;
@@ -356,9 +657,14 @@ export const cardStyles = css`
     .dish * {
       animation: none !important;
     }
-    .dish.online .wave,
-    .dish.limited .wave,
-    .dish.alert .wave {
+    .dish .orbit {
+      transform: none;
+    }
+    .dish .beam,
+    .dish .sat,
+    .dish.online .wifi .wave,
+    .dish .drop,
+    .dish .flake {
       opacity: 0.8;
     }
   }
