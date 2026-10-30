@@ -1,5 +1,6 @@
 {
   "name": "Starlink Local Card",
   "render_readme": true,
-  "filename": "ha-starlink-local-card.js"
+  "filename": "ha-starlink-local-card.js",
+  "homeassistant": "2024.11.0"
 }

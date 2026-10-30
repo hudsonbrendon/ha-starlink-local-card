@@ -1,80 +1,73 @@
-<h1 align="center">Starlink Local Card</h1>
+# Starlink Local Card
 
-<p align="center">
-  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Custom"></a>
-  <a href="https://github.com/hudsonbrendon/ha-starlink-local-card/actions/workflows/validate.yml"><img src="https://github.com/hudsonbrendon/ha-starlink-local-card/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-</p>
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![Release](https://img.shields.io/github/v/release/hudsonbrendon/ha-starlink-local-card)](https://github.com/hudsonbrendon/ha-starlink-local-card/releases)
+[![Lint and Test](https://github.com/hudsonbrendon/ha-starlink-local-card/actions/workflows/lint.yml/badge.svg)](https://github.com/hudsonbrendon/ha-starlink-local-card/actions/workflows/lint.yml)
 
-An **isometric Starlink Mini** Lovelace card that comes alive with the
-[`starlink_local`](https://github.com/hudsonbrendon/ha-starlink-local) integration:
-the phased-array panel tilts to the dish's real **azimuth/elevation**, a dashed
-ghost shows the **desired** aim, the array brightens with **signal quality**, and
-an amber badge lights up when the dish reports **bandwidth restriction**.
+Lovelace card for a Starlink dish running the
+[Starlink Local integration](https://github.com/hudsonbrendon/ha-starlink-local)
+(local gRPC, dish + router). Same layout and minimal grey / white drawing as
+the vacuum, HP printer and Intelbras solar cards: tips row, animated
+illustration, name + status, stats and a toolbar.
 
-<p align="center"><img src="demo.png" alt="Starlink Local Card — normal and bandwidth-restricted" width="760"></p>
+- **Animated dish**: a Starlink Mini reclined to the real elevation, a compass
+  needle on the azimuth (dashed line on the desired azimuth), signal waves
+  pulsing up and a satellite crossing the sky while connected. Amber waves
+  when bandwidth is restricted or alerts are active, a tree in the way and
+  stuttering waves when obstructed, faint waves and a blinking LED while
+  searching, warm glow and melting snow when heating, red LED + warning on
+  thermal throttling, "z z" when sleeping, flat when stowed, greyed out when
+  unavailable. Respects `prefers-reduced-motion` and dark mode.
+- **Tips**: PoP ping, Wi-Fi clients, GPS satellites and the restriction reason.
+- **Signal bar** (signal quality) and alignment (azimuth / elevation).
+- **Stats** per state: download / upload (Mbps) / ping; obstruction first when
+  obstructed. Configurable.
+- **Toolbar**: obstruction map; with Home Assistant's built-in
+  [Starlink integration](https://www.home-assistant.io/integrations/starlink/)
+  also stow / unstow and reboot (both with confirmation), and its heating,
+  sleep and thermal sensors drive the states above. Works with the built-in
+  integration alone too.
 
-## Features
-
-- 🛰️ Faithful Starlink **Mini** drawn as an isometric phased-array panel on its fold-out kickstand.
-- 🎯 Panel **tilts to the live azimuth/elevation**, eased smoothly; a dashed **ghost** marks the desired aim and the header shows how far off (`Alinhado` / `Desalinhado N°`).
-- 📶 Array glow scales with **signal quality**; status LED turns amber on restriction.
-- 🐢 **Bandwidth-restricted** badge with the reason (e.g. `LOW_SPEED_POLICY_LIMIT`).
-- 📊 Footer readout: azimuth, elevation, signal, ping, downlink, uplink, WiFi clients.
-- 🎨 Self-contained SVG (no runtime deps), light/dark aware, scales to phone width.
-- 🔍 **Auto-discovers** its entities from the `starlink_local` platform — usually zero config.
+![States](assets/states.png)
 
 ## Installation
 
-### HACS
+1. HACS → Frontend → ⋮ → *Custom repositories* → add
+   `https://github.com/hudsonbrendon/ha-starlink-local-card` as *Dashboard*.
+2. Install **Starlink Local Card**. HACS adds the resource automatically.
 
-1. HACS → ⋮ → **Custom repositories** → add `https://github.com/hudsonbrendon/ha-starlink-local-card`, category **Dashboard**.
-2. Install **Starlink Local Card**.
-3. Add the card to a dashboard (it appears in the card picker).
+Manual: copy `dist/ha-starlink-local-card.js` to `config/www/` and add
+`/local/ha-starlink-local-card.js` as a JavaScript module resource.
 
-### Manual
-
-Copy `ha-starlink-local-card.js` to `config/www/` and add a dashboard resource:
-
-```yaml
-url: /local/ha-starlink-local-card.js
-type: module
-```
-
-## Usage
-
-Zero-config — it finds the `starlink_local` entities on its own:
+## Configuration
 
 ```yaml
 type: custom:starlink-local-card
+device: 2851588888…   # the "Starlink Dish" device (pick it in the visual editor)
 ```
 
-With overrides:
+| Option | Default | Description |
+| --- | --- | --- |
+| `device` | — | Device id of the dish. Router entities of the same entry are found automatically. |
+| `entities` | — | Explicit overrides per key (`downlink`, `uplink`, `pop_ping`, `signal_quality`, `obstruction`, `azimuth`, `elevation`, `clients`, `stowed`, `reboot`...). Without `device`, `entities.downlink` or `entities.pop_ping` is required. |
+| `name` | device name | Title shown under the illustration. |
+| `show_name` / `show_status` / `show_toolbar` | `true` | Toggle sections. |
+| `compact_view` | `false` | Hide the illustration and stats. |
+| `language` | HA language | Force `en` or `pt-BR`. |
+| `stats` | see above | Per-state list (`default`, `online`, `obstructed`...) of `{ key \| entity, attribute, unit, subtitle }`. |
+| `shortcuts` | `[]` | Extra toolbar buttons `{ name, icon, service, service_data, target }`. |
 
-```yaml
-type: custom:starlink-local-card
-title: Antena Starlink
-entities:
-  azimuth: sensor.starlink_dish_antenna_azimuth
-  elevation: sensor.starlink_dish_antenna_elevation
-  desired_azimuth: sensor.starlink_dish_desired_azimuth
-  desired_elevation: sensor.starlink_dish_desired_elevation
-  signal: sensor.starlink_dish_signal_quality
-  obstruction: sensor.starlink_dish_fraction_obstructed
-  restricted: binary_sensor.starlink_dish_bandwidth_restricted
-  dl_reason: sensor.starlink_dish_downlink_restriction_reason
-  pop_ping: sensor.starlink_dish_pop_ping_latency
-  downlink: sensor.starlink_dish_downlink_throughput
-  uplink: sensor.starlink_dish_uplink_throughput
-  clients: sensor.starlink_router_wifi_clients
+0.1.x configs (`title`, `entities.signal`, `entities.restricted`,
+`entities.dl_reason`) keep working.
+
+## Development
+
+```bash
+npm install
+npm run build      # dist/ha-starlink-local-card.js
+npm test           # vitest
+npm run lint && npm run typecheck
 ```
-
-## Credits
-
-Built by [@hudsonbrendon](https://github.com/hudsonbrendon). The isometric look
-follows the [anatomy](https://github.com/wheresryan22/anatomy) method; the
-renderer here is a self-contained subset. Companion to the
-[Starlink Local integration](https://github.com/hudsonbrendon/ha-starlink-local).
 
 ## License
 
