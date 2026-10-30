@@ -30,6 +30,7 @@ const DEFAULT_STATS: Record<string, StatConfig[]> = {
 };
 
 const RATE_KEYS = new Set<EntityKey>(["downlink", "uplink", "native_download", "native_upload"]);
+const PING_KEYS = new Set<EntityKey>(["pop_ping", "wan_ping", "native_ping"]);
 const QUIET_STATES = new Set<StarlinkState>(["sleeping", "stowed", "searching"]);
 
 function fireEvent(node: HTMLElement, type: string, detail?: unknown): void {
@@ -147,6 +148,10 @@ export class StarlinkLocalCard extends LitElement {
     if (key && RATE_KEYS.has(key)) {
       const value = mbps(this.hass, stateObj.entity_id);
       if (value !== null) return `${this._number(value, value < 10 ? 1 : 0)} Mbps`;
+    }
+    if (key && PING_KEYS.has(key)) {
+      const value = numeric(this.hass, stateObj.entity_id);
+      if (value !== null) return `${this._number(value)} ms`;
     }
     if (this.hass?.formatEntityState) {
       try {

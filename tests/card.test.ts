@@ -108,6 +108,11 @@ describe("helpers", () => {
 });
 
 describe("rendering", () => {
+  it("rounds the ping", async () => {
+    const el = await mount({ device: DISH }, { pop_ping: "24.535809" });
+    expect($(el, ".tip")!.textContent!.trim()).toBe("25 ms");
+  });
+
   it("renders the online card", async () => {
     const el = await mount({ device: DISH });
     expect($(el, "svg.dish")!.classList.contains("online")).toBe(true);
