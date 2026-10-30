@@ -1,0 +1,51 @@
+{
+  "common": {
+    "name": "Starlink Local Card",
+    "description": "Card animado da antena Starlink para a integração Starlink Local.",
+    "not_available": "Antena indisponível",
+    "missing_entity": "Escolha o dispositivo da antena Starlink (ou defina entities.downlink).",
+    "invalid_config": "Configuração inválida",
+    "more_info": "Mais informações",
+    "alignment": "Azimute {azimuth}° · Elevação {elevation}°",
+    "signal": "Sinal {percent}%",
+    "clients": "{count} clientes",
+    "reboot": "Reiniciar antena",
+    "confirm_reboot": "Reiniciar a antena Starlink? A internet cai por alguns minutos.",
+    "stow": "Guardar",
+    "unstow": "Desguardar",
+    "confirm_stow": "Guardar a antena? Ela para de conectar até ser desguardada.",
+    "confirm_unstow": "Desguardar a antena?",
+    "obstruction_map": "Mapa de obstrução",
+    "restricted": "Restrita: {reason}"
+  },
+  "status": {
+    "online": "Conectada",
+    "limited": "Banda restringida",
+    "alert": "Conectada com alertas",
+    "obstructed": "Obstruída",
+    "searching": "Procurando satélites",
+    "heating": "Derretendo neve",
+    "thermal": "Limitada por temperatura",
+    "sleeping": "Dormindo",
+    "stowed": "Guardada",
+    "unavailable": "Indisponível"
+  },
+  "stat": {
+    "download": "Download",
+    "upload": "Upload",
+    "ping": "Ping",
+    "obstruction": "Obstrução",
+    "signal": "Sinal",
+    "gps_sats": "Satélites GPS",
+    "uptime": "Ligada há"
+  },
+  "editor": {
+    "device": "Dispositivo da antena",
+    "name": "Nome",
+    "weather_entity": "Entidade de clima (céu)",
+    "show_name": "Mostrar nome",
+    "show_status": "Mostrar status",
+    "show_toolbar": "Mostrar barra de ações",
+    "compact_view": "Modo compacto"
+  }
+}

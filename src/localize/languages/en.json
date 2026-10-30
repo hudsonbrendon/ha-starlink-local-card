@@ -1,0 +1,51 @@
+{
+  "common": {
+    "name": "Starlink Local Card",
+    "description": "Animated Starlink dish card for the Starlink Local integration.",
+    "not_available": "Dish unavailable",
+    "missing_entity": "Pick the Starlink dish device (or set entities.downlink).",
+    "invalid_config": "Invalid configuration",
+    "more_info": "More info",
+    "alignment": "Azimuth {azimuth}° · Elevation {elevation}°",
+    "signal": "Signal {percent}%",
+    "clients": "{count} clients",
+    "reboot": "Reboot dish",
+    "confirm_reboot": "Reboot the Starlink dish? The internet drops for a few minutes.",
+    "stow": "Stow",
+    "unstow": "Unstow",
+    "confirm_stow": "Stow the dish? It stops connecting until unstowed.",
+    "confirm_unstow": "Unstow the dish?",
+    "obstruction_map": "Obstruction map",
+    "restricted": "Restricted: {reason}"
+  },
+  "status": {
+    "online": "Connected",
+    "limited": "Bandwidth restricted",
+    "alert": "Connected with alerts",
+    "obstructed": "Obstructed",
+    "searching": "Searching for satellites",
+    "heating": "Melting snow",
+    "thermal": "Thermal throttling",
+    "sleeping": "Sleeping",
+    "stowed": "Stowed",
+    "unavailable": "Unavailable"
+  },
+  "stat": {
+    "download": "Download",
+    "upload": "Upload",
+    "ping": "Ping",
+    "obstruction": "Obstruction",
+    "signal": "Signal",
+    "gps_sats": "GPS satellites",
+    "uptime": "Uptime"
+  },
+  "editor": {
+    "device": "Dish device",
+    "name": "Name",
+    "weather_entity": "Weather entity (sky)",
+    "show_name": "Show name",
+    "show_status": "Show status",
+    "show_toolbar": "Show toolbar",
+    "compact_view": "Compact view"
+  }
+}
