@@ -108,6 +108,11 @@ describe("helpers", () => {
 });
 
 describe("rendering", () => {
+  it("shows idle traffic in kbps", async () => {
+    const el = await mount({ device: DISH }, { downlink: "7885.29" });
+    expect($(el, ".stats-value")!.textContent).toBe("7.9 kbps");
+  });
+
   it("rounds the ping", async () => {
     const el = await mount({ device: DISH }, { pop_ping: "24.535809" });
     expect($(el, ".tip")!.textContent!.trim()).toBe("25 ms");

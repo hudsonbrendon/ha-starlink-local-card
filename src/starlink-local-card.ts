@@ -147,6 +147,10 @@ export class StarlinkLocalCard extends LitElement {
     if (!stateObj || stateObj.state === "unknown" || stateObj.state === "unavailable") return "—";
     if (key && RATE_KEYS.has(key)) {
       const value = mbps(this.hass, stateObj.entity_id);
+      if (value !== null && value > 0 && value < 1) {
+        const kbps = value * 1000;
+        return `${this._number(kbps, kbps < 10 ? 1 : 0)} kbps`;
+      }
       if (value !== null) return `${this._number(value, value < 10 ? 1 : 0)} Mbps`;
     }
     if (key && PING_KEYS.has(key)) {
